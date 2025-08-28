@@ -5,6 +5,7 @@ LangChain과 LangGraph를 활용한 재무관리 전문 에이전트들
 
 import os
 import logging
+import time
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
@@ -25,6 +26,17 @@ from ..rag.knowledge_base import KnowledgeBase
 
 logger = logging.getLogger(__name__)
 
+# AgentState 클래스 정의 (MultiAgentSystem보다 먼저 정의)
+class AgentState:
+    """에이전트 상태 클래스"""
+    
+    def __init__(self, query: str = "", user_data: Dict[str, Any] = None, 
+                 context: str = "", results: Dict[str, Any] = None):
+        self.query = query
+        self.user_data = user_data or {}
+        self.context = context
+        self.results = results or {}
+
 class MultiAgentSystem:
     """재무관리 Multi Agent 시스템"""
     
@@ -39,10 +51,13 @@ class MultiAgentSystem:
         
     def initialize(self, knowledge_base: KnowledgeBase = None) -> bool:
         """Multi Agent 시스템 초기화"""
+        total_start_time = time.time()
         try:
-            logger.info("Multi Agent 시스템 초기화 시작...")
+            logger.info("🤖 Multi Agent 시스템 초기화 시작...")
             
             # LLM 초기화
+            llm_start_time = time.time()
+            logger.info("🧠 LLM 초기화 중...")
             self.llm = AzureChatOpenAI(
                 openai_api_key=os.getenv("AOAI_API_KEY"),
                 openai_api_base=os.getenv("AOAI_ENDPOINT"),
@@ -50,58 +65,85 @@ class MultiAgentSystem:
                 deployment_name=os.getenv("AOAI_DEPLOY_GPT4O_MINI"),
                 temperature=0.7
             )
+            llm_elapsed = time.time() - llm_start_time
+            logger.info(f"✅ LLM 초기화 완료: {llm_elapsed:.2f}초")
             
             # 지식베이스 설정
             self.knowledge_base = knowledge_base
             
             # 에이전트 초기화
+            agent_start_time = time.time()
+            logger.info("👥 에이전트 초기화 중...")
             self._initialize_agents()
+            agent_elapsed = time.time() - agent_start_time
+            logger.info(f"✅ 에이전트 초기화 완료: {agent_elapsed:.2f}초")
             
             # 워크플로우 생성
+            workflow_start_time = time.time()
+            logger.info("🔄 워크플로우 생성 중...")
             self._create_workflow()
+            workflow_elapsed = time.time() - workflow_start_time
+            logger.info(f"✅ 워크플로우 생성 완료: {workflow_elapsed:.2f}초")
             
             self.is_initialized = True
-            logger.info("Multi Agent 시스템 초기화 완료")
+            total_elapsed = time.time() - total_start_time
+            logger.info(f"🎉 Multi Agent 시스템 초기화 완료! 총 소요시간: {total_elapsed:.2f}초")
             return True
             
         except Exception as e:
-            logger.error(f"Multi Agent 시스템 초기화 실패: {e}")
+            logger.error(f"❌ Multi Agent 시스템 초기화 실패: {e}")
             return False
     
     def _initialize_agents(self):
         """각 전문 에이전트 초기화"""
         try:
             # 예산 관리 에이전트
+            budget_start_time = time.time()
+            logger.info("💰 예산 관리 에이전트 초기화 중...")
             budget_tools = [
                 BudgetAnalysisTool(),
                 ExpenseCategorizationTool(),
                 SavingsPlanTool()
             ]
             self.agents["budget"] = self._create_agent("budget", budget_tools)
+            budget_elapsed = time.time() - budget_start_time
+            logger.info(f"✅ 예산 관리 에이전트 완료: {budget_elapsed:.2f}초")
             
             # 투자 관리 에이전트
+            investment_start_time = time.time()
+            logger.info("📈 투자 관리 에이전트 초기화 중...")
             investment_tools = [
                 PortfolioAnalysisTool(),
                 InvestmentRecommendationTool(),
                 MarketAnalysisTool()
             ]
             self.agents["investment"] = self._create_agent("investment", investment_tools)
+            investment_elapsed = time.time() - investment_start_time
+            logger.info(f"✅ 투자 관리 에이전트 완료: {investment_elapsed:.2f}초")
             
             # 세금 관리 에이전트
+            tax_start_time = time.time()
+            logger.info("💰 세금 관리 에이전트 초기화 중...")
             tax_tools = [
                 TaxDeductionAnalysisTool(),
                 InvestmentTaxAnalysisTool(),
                 BusinessTaxAnalysisTool()
             ]
             self.agents["tax"] = self._create_agent("tax", tax_tools)
+            tax_elapsed = time.time() - tax_start_time
+            logger.info(f"✅ 세금 관리 에이전트 완료: {tax_elapsed:.2f}초")
             
             # 은퇴 관리 에이전트
+            retirement_start_time = time.time()
+            logger.info("👴 은퇴 관리 에이전트 초기화 중...")
             retirement_tools = [
                 RetirementGoalCalculatorTool(),
                 PensionProductAnalysisTool(),
                 RetirementRoadmapTool()
             ]
             self.agents["retirement"] = self._create_agent("retirement", retirement_tools)
+            retirement_elapsed = time.time() - retirement_start_time
+            logger.info(f"✅ 은퇴 관리 에이전트 완료: {retirement_elapsed:.2f}초")
             
             logger.info(f"{len(self.agents)}개의 전문 에이전트 초기화 완료")
             
@@ -441,20 +483,9 @@ Human: {input}
     def clear_all_memories(self):
         """모든 에이전트의 메모리 초기화"""
         try:
-            for agent in self.agents.values():
+        for agent in self.agents.values():
                 if hasattr(agent, 'memory'):
                     agent.memory.clear()
-            logger.info("모든 에이전트의 메모리가 초기화되었습니다.")
+        logger.info("모든 에이전트의 메모리가 초기화되었습니다.")
         except Exception as e:
             logger.error(f"메모리 초기화 실패: {e}")
-
-# AgentState 클래스 정의
-class AgentState:
-    """에이전트 상태 클래스"""
-    
-    def __init__(self, query: str = "", user_data: Dict[str, Any] = None, 
-                 context: str = "", results: Dict[str, Any] = None):
-        self.query = query
-        self.user_data = user_data or {}
-        self.context = context
-        self.results = results or {}

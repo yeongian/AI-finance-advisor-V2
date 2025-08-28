@@ -1,19 +1,35 @@
 [server]
-port = 8501
-address = "0.0.0.0"
+# 서버 성능 최적화
+maxUploadSize = 200
 enableCORS = true
 enableXsrfProtection = false
-maxUploadSize = 200
+headless = true
 
 [browser]
+# 브라우저 최적화
 gatherUsageStats = false
+serverAddress = "localhost"
+serverPort = 8501
 
 [theme]
-primaryColor = "#FF6B35"
+# 테마 설정
+primaryColor = "#FF6B6B"
 backgroundColor = "#FFFFFF"
 secondaryBackgroundColor = "#F0F2F6"
 textColor = "#262730"
-font = "sans serif"
 
 [client]
-showErrorDetails = true
+# 클라이언트 최적화
+showErrorDetails = false
+toolbarMode = "minimal"
+
+[runner]
+# 러너 최적화
+magicEnabled = false
+installTracer = false
+fixMatplotlib = true
+
+[logger]
+# 로깅 최적화
+level = "warning"
+messageFormat = "%(asctime)s %(message)s"

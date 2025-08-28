@@ -4,6 +4,7 @@ RAG (Retrieval-Augmented Generation) 지식베이스
 
 import os
 import json
+import time
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 import logging
@@ -26,29 +27,43 @@ class KnowledgeBase:
         
     def initialize(self) -> bool:
         """지식베이스 초기화"""
+        total_start_time = time.time()
         try:
-            logger.info("지식베이스 초기화 시작...")
+            logger.info("📚 지식베이스 초기화 시작...")
             
             # OpenAI 임베딩 초기화
+            embed_start_time = time.time()
+            logger.info("🔧 OpenAI 임베딩 초기화 중...")
             self.embeddings = OpenAIEmbeddings(
                 openai_api_key=os.getenv("AOAI_API_KEY"),
                 openai_api_base=os.getenv("AOAI_ENDPOINT"),
                 openai_api_version="2024-02-15-preview",
                 deployment=os.getenv("AOAI_DEPLOY_EMBED_3_SMALL")
             )
+            embed_elapsed = time.time() - embed_start_time
+            logger.info(f"✅ 임베딩 초기화 완료: {embed_elapsed:.2f}초")
             
             # 문서 로드
+            doc_start_time = time.time()
+            logger.info("📄 문서 로드 중...")
             self._load_documents()
+            doc_elapsed = time.time() - doc_start_time
+            logger.info(f"✅ 문서 로드 완료: {doc_elapsed:.2f}초")
             
             # 벡터 스토어 생성
+            vector_start_time = time.time()
+            logger.info("🗄️ 벡터 스토어 생성 중...")
             self._create_vector_store()
+            vector_elapsed = time.time() - vector_start_time
+            logger.info(f"✅ 벡터 스토어 생성 완료: {vector_elapsed:.2f}초")
             
             self.is_initialized = True
-            logger.info("지식베이스 초기화 완료")
+            total_elapsed = time.time() - total_start_time
+            logger.info(f"🎉 지식베이스 초기화 완료! 총 소요시간: {total_elapsed:.2f}초")
             return True
             
         except Exception as e:
-            logger.error(f"지식베이스 초기화 실패: {e}")
+            logger.error(f"❌ 지식베이스 초기화 실패: {e}")
             return False
     
     def _load_documents(self):
@@ -61,6 +76,8 @@ class KnowledgeBase:
                     content = f.read()
                 
                 # 문서 분할
+                split_start_time = time.time()
+                logger.info("✂️ 문서 분할 중...")
                 text_splitter = RecursiveCharacterTextSplitter(
                     chunk_size=1000,
                     chunk_overlap=200,
@@ -68,8 +85,11 @@ class KnowledgeBase:
                 )
                 
                 chunks = text_splitter.split_text(content)
+                split_elapsed = time.time() - split_start_time
+                logger.info(f"✅ 문서 분할 완료: {len(chunks)}개 청크, {split_elapsed:.2f}초")
                 
                 # Document 객체 생성
+                doc_create_start_time = time.time()
                 self.documents = [
                     Document(
                         page_content=chunk,
@@ -77,32 +97,58 @@ class KnowledgeBase:
                     )
                     for chunk in chunks
                 ]
+                doc_create_elapsed = time.time() - doc_create_start_time
+                logger.info(f"✅ Document 객체 생성 완료: {doc_create_elapsed:.2f}초")
                 
-                logger.info(f"{len(self.documents)}개의 문서 청크 로드 완료")
+                logger.info(f"📊 총 {len(self.documents)}개의 문서 청크 로드 완료")
             else:
-                logger.warning("재무 지식 파일을 찾을 수 없습니다.")
+                logger.warning("⚠️ 재무 지식 파일을 찾을 수 없습니다.")
                 
         except Exception as e:
-            logger.error(f"문서 로드 실패: {e}")
+            logger.error(f"❌ 문서 로드 실패: {e}")
     
     def _create_vector_store(self):
         """벡터 스토어 생성"""
         try:
             if self.documents and self.embeddings:
+                # 기존 벡터 스토어가 있는지 확인
+                vector_store_path = Path("data/vector_store")
+                if vector_store_path.exists():
+                    load_start_time = time.time()
+                    logger.info("📂 기존 벡터 스토어 로드 중...")
+                    try:
+                        self.vector_store = FAISS.load_local("data/vector_store", self.embeddings)
+                        load_elapsed = time.time() - load_start_time
+                        logger.info(f"✅ 기존 벡터 스토어 로드 완료: {load_elapsed:.2f}초")
+                        return
+                    except Exception as e:
+                        logger.warning(f"⚠️ 기존 벡터 스토어 로드 실패, 새로 생성합니다: {e}")
+                
                 # FAISS 벡터 스토어 생성
+                faiss_start_time = time.time()
+                logger.info("🔍 FAISS 벡터 스토어 생성 중...")
                 self.vector_store = FAISS.from_documents(
                     self.documents,
                     self.embeddings
                 )
+                faiss_elapsed = time.time() - faiss_start_time
+                logger.info(f"✅ FAISS 벡터 스토어 생성 완료: {faiss_elapsed:.2f}초")
                 
                 # 벡터 스토어 저장
+                save_start_time = time.time()
+                logger.info("💾 벡터 스토어 저장 중...")
+                # 저장 디렉토리 생성
+                vector_store_path.parent.mkdir(parents=True, exist_ok=True)
                 self.vector_store.save_local("data/vector_store")
-                logger.info("벡터 스토어 생성 및 저장 완료")
+                save_elapsed = time.time() - save_start_time
+                logger.info(f"✅ 벡터 스토어 저장 완료: {save_elapsed:.2f}초")
+                
+                logger.info("🗄️ 벡터 스토어 생성 및 저장 완료")
             else:
-                logger.warning("문서 또는 임베딩이 없어 벡터 스토어를 생성할 수 없습니다.")
+                logger.error("❌ 문서 또는 임베딩이 초기화되지 않았습니다.")
                 
         except Exception as e:
-            logger.error(f"벡터 스토어 생성 실패: {e}")
+            logger.error(f"❌ 벡터 스토어 생성 실패: {e}")
     
     def search(self, query: str, k: int = 5) -> List[Document]:
         """관련 문서 검색"""

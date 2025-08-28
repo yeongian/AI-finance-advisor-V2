@@ -4,6 +4,7 @@ AI 재무관리 어드바이저의 REST API 서버 (RAG + Multi Agent 통합)
 """
 
 import logging
+import time
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
@@ -18,8 +19,20 @@ from ..rag.knowledge_base import KnowledgeBase
 from ..agents.multi_agent_system import MultiAgentSystem
 
 # 로깅 설정
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
+
+# 성능 측정을 위한 전역 변수
+startup_times = {}
+
+def log_performance(step_name: str, start_time: float):
+    """성능 측정 로깅"""
+    elapsed = time.time() - start_time
+    startup_times[step_name] = elapsed
+    logger.info(f"⏱️ {step_name} 완료: {elapsed:.2f}초")
 
 # FastAPI 앱 생성
 app = FastAPI(
@@ -92,30 +105,50 @@ class ComprehensiveAnalysisRequest(BaseModel):
     user_data: UserData = Field(..., description="사용자 데이터")
 
 # 의존성 함수들
-async def get_knowledge_base() -> KnowledgeBase:
-    """지식베이스 의존성"""
+async def get_knowledge_base():
+    """지식베이스 의존성 (지연 로딩)"""
     global knowledge_base
     if knowledge_base is None:
-        knowledge_base = KnowledgeBase()
-        success = knowledge_base.initialize()
-        if not success:
+        try:
+            from ..rag.knowledge_base import KnowledgeBase
+            logger.info("📚 지식베이스 지연 로딩 시작...")
+            knowledge_base = KnowledgeBase()
+            success = knowledge_base.initialize()
+            if not success:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="지식베이스 초기화 실패"
+                )
+            logger.info("📚 지식베이스 지연 로딩 완료")
+        except ImportError as e:
+            logger.error(f"지식베이스 모듈 임포트 실패: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="지식베이스 초기화 실패"
+                detail="지식베이스 모듈을 찾을 수 없습니다"
             )
     return knowledge_base
 
-async def get_multi_agent_system() -> MultiAgentSystem:
-    """멀티 에이전트 시스템 의존성"""
+async def get_multi_agent_system():
+    """멀티 에이전트 시스템 의존성 (지연 로딩)"""
     global multi_agent_system
     if multi_agent_system is None:
-        multi_agent_system = MultiAgentSystem()
-        kb = await get_knowledge_base()
-        success = multi_agent_system.initialize(kb)
-        if not success:
+        try:
+            from ..agents.multi_agent_system import MultiAgentSystem
+            logger.info("🤖 멀티 에이전트 시스템 지연 로딩 시작...")
+            multi_agent_system = MultiAgentSystem()
+            kb = await get_knowledge_base()
+            success = multi_agent_system.initialize(kb)
+            if not success:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="멀티 에이전트 시스템 초기화 실패"
+                )
+            logger.info("🤖 멀티 에이전트 시스템 지연 로딩 완료")
+        except ImportError as e:
+            logger.error(f"멀티 에이전트 시스템 모듈 임포트 실패: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="멀티 에이전트 시스템 초기화 실패"
+                detail="멀티 에이전트 시스템 모듈을 찾을 수 없습니다"
             )
     return multi_agent_system
 
@@ -347,30 +380,21 @@ async def global_exception_handler(request, exc):
         }
     )
 
-# 시작 이벤트
+# 시작 이벤트 (최적화)
 @app.on_event("startup")
 async def startup_event():
-    """애플리케이션 시작 시 실행"""
-    logger.info("AI 재무관리 어드바이저 API 서버가 시작되었습니다.")
+    """애플리케이션 시작 시 실행 (최적화된 버전)"""
+    total_start_time = time.time()
+    logger.info("🚀 AI 재무관리 어드바이저 API 서버 시작 중...")
     
-    # 지식베이스 초기화
-    global knowledge_base
-    knowledge_base = KnowledgeBase()
-    success = knowledge_base.initialize()
-    if not success:
-        logger.error("지식베이스 초기화 실패")
-    else:
-        logger.info("지식베이스 초기화 완료")
+    # 기본 서버만 시작하고, 무거운 컴포넌트는 지연 로딩으로 처리
+    logger.info("⚡ 빠른 시작을 위해 지연 로딩 모드로 실행됩니다.")
+    logger.info("📚 지식베이스와 멀티 에이전트는 첫 요청 시 로드됩니다.")
     
-    # 멀티 에이전트 시스템 초기화
-    global multi_agent_system
-    multi_agent_system = MultiAgentSystem()
-    if knowledge_base:
-        success = multi_agent_system.initialize(knowledge_base)
-        if not success:
-            logger.error("멀티 에이전트 시스템 초기화 실패")
-        else:
-            logger.info("멀티 에이전트 시스템 초기화 완료")
+    # 전체 시작 시간 로깅
+    total_elapsed = time.time() - total_start_time
+    logger.info(f"✅ 서버 시작 완료! 총 소요시간: {total_elapsed:.2f}초")
+    logger.info("🎯 이제 API 요청을 받을 준비가 되었습니다!")
 
 # 종료 이벤트
 @app.on_event("shutdown")
@@ -381,7 +405,7 @@ async def shutdown_event():
 # 직접 실행 시
 if __name__ == "__main__":
     uvicorn.run(
-        "main:app",
+        "src.api.main:app",
         host=settings.host,
         port=settings.port,
         reload=settings.debug,
