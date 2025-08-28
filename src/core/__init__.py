@@ -2,7 +2,7 @@
 핵심 기능 패키지
 """
 
-from .config import config
+from .config import settings
 from .utils import *
 
-__all__ = ['config']
+__all__ = ['settings']

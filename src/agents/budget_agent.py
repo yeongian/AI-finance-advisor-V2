@@ -1,200 +1,325 @@
 """
-예산 분석 및 추천 AI Agent
-사용자의 소득/지출 패턴을 분석하고 예산 최적화 조언을 제공합니다.
+예산 관리 전문 에이전트
+개인 예산 분석, 지출 관리, 저축 계획 등을 담당하는 AI 에이전트
 """
 
-from typing import Dict, Any, List
+import logging
+from typing import Dict, Any, List, Optional
+import json
+import pandas as pd
+import plotly.graph_objects as go
+import plotly.express as px
+from datetime import datetime, timedelta
+
+from langchain.tools import BaseTool, tool
+from langchain.schema import Document
+
 from .base_agent import BaseAgent
-from ..core.utils import format_currency, calculate_basic_metrics, validate_user_input
+from ..core.utils import format_currency, format_percentage, calculate_returns
+from ..rag.knowledge_base import KnowledgeBase
 
-class BudgetAgent(BaseAgent):
-    """예산 분석 및 추천 AI Agent"""
+logger = logging.getLogger(__name__)
+
+class BudgetAnalysisTool(BaseTool):
+    """예산 분석 도구"""
     
-    def __init__(self):
-        super().__init__("Budget Advisor", "gpt-4o-mini")
+    name: str = "budget_analysis"
+    description: str = "사용자의 수입, 지출, 저축 데이터를 분석하여 예산 현황을 파악합니다."
     
-    def _get_system_prompt(self) -> str:
-        return """당신은 전문적인 개인 재무 관리 어드바이저입니다. 
-특히 예산 관리와 지출 최적화에 전문성을 가지고 있습니다.
-
-당신의 역할:
-1. 사용자의 소득과 지출 패턴을 분석하여 예산 최적화 방안을 제시
-2. 카테고리별 지출 분석을 통한 절약 포인트 발견
-3. 실현 가능한 예산 계획 수립 지원
-4. 재무 목표 달성을 위한 단계별 가이드 제공
-
-답변 시 다음 사항을 고려하세요:
-- 구체적이고 실용적인 조언 제공
-- 한국의 경제 상황과 세금 제도를 반영
-- 사용자의 연령대와 소득 수준에 맞는 맞춤형 조언
-- 단계별 실행 가능한 액션 플랜 제시
-- 긍정적이고 격려하는 톤 유지
-
-항상 한국어로 답변하고, 금액은 원화로 표시하되 천 단위 구분자를 사용하세요."""
-    
-    def process_query(self, user_query: str, user_data: Dict[str, Any] = None) -> Dict[str, Any]:
-        """예산 관련 질의 처리"""
+    def _run(self, user_data: str) -> str:
+        """예산 분석 실행"""
         try:
-            # 사용자 데이터 검증
-            if user_data:
-                validated_data = validate_user_input(user_data)
-            else:
-                validated_data = None
+            data = json.loads(user_data)
             
-            # 컨텍스트 생성
-            context = self._create_context(validated_data)
+            income = data.get('income', 0)
+            expenses = data.get('expenses', 0)
+            savings = data.get('savings', 0)
             
-            # 메시지 생성
-            messages = self._create_messages(user_query, context)
+            # 기본 지표 계산
+            net_income = income - expenses
+            savings_rate = (net_income / income * 100) if income > 0 else 0
+            emergency_fund_months = (savings / expenses) if expenses > 0 else 0
             
-            # 응답 생성
-            response = self._get_response(messages)
+            # 재무 건강도 점수 계산
+            health_score = min(100, max(0, 
+                savings_rate * 2 + 
+                min(emergency_fund_months * 10, 40) +
+                (20 if net_income > 0 else 0)
+            ))
             
-            # 메모리 업데이트
-            self.update_memory(user_query, response)
+            analysis = {
+                "net_income": net_income,
+                "savings_rate": savings_rate,
+                "emergency_fund_months": emergency_fund_months,
+                "health_score": health_score,
+                "recommendations": self._generate_recommendations(data)
+            }
             
-            return self._format_response(response, "budget")
+            return json.dumps(analysis, ensure_ascii=False, indent=2)
             
         except Exception as e:
-            self.logger.error(f"예산 분석 중 오류: {e}")
-            error_response = f"예산 분석 중 오류가 발생했습니다: {str(e)}"
-            return self._format_response(error_response, "budget")
+            logger.error(f"예산 분석 실패: {e}")
+            return json.dumps({"error": str(e)})
     
-    def _create_context(self, user_data: Dict[str, Any] = None) -> str:
-        """사용자 데이터 기반 컨텍스트 생성"""
-        if not user_data:
-            return "사용자 데이터가 제공되지 않았습니다. 일반적인 예산 관리 조언을 제공합니다."
-        
-        try:
-            # 기본 재무 지표 계산
-            metrics = calculate_basic_metrics(
-                user_data.get('income', 0),
-                user_data.get('expenses', 0),
-                user_data.get('savings', 0)
-            )
-            
-            context = f"""
-사용자 재무 현황:
-- 나이: {user_data.get('age', 'N/A')}세
-- 연소득: {format_currency(user_data.get('income', 0))}
-- 연지출: {format_currency(user_data.get('expenses', 0))}
-- 저축금: {format_currency(user_data.get('savings', 0))}
-
-재무 지표:
-- 순소득: {format_currency(metrics['net_income'])}
-- 저축률: {metrics['savings_rate']:.1f}%
-- 비상금 보유 개월: {metrics['emergency_fund_months']:.1f}개월
-- 재무 건강도 점수: {metrics['financial_health_score']:.0f}/100
-"""
-            
-            # 월별 지출 내역이 있으면 추가
-            if 'monthly_expenses' in user_data:
-                context += "\n월별 지출 내역:\n"
-                for category, amount in user_data['monthly_expenses'].items():
-                    context += f"- {category}: {format_currency(amount)}\n"
-            
-            return context
-            
-        except Exception as e:
-            self.logger.error(f"컨텍스트 생성 중 오류: {e}")
-            return "사용자 데이터 처리 중 오류가 발생했습니다."
-    
-    def analyze_spending_patterns(self, monthly_expenses: Dict[str, float]) -> Dict[str, Any]:
-        """지출 패턴 분석"""
-        total_expenses = sum(monthly_expenses.values())
-        analysis = {
-            "total_monthly": total_expenses,
-            "total_yearly": total_expenses * 12,
-            "categories": {}
-        }
-        
-        for category, amount in monthly_expenses.items():
-            percentage = (amount / total_expenses) * 100 if total_expenses > 0 else 0
-            analysis["categories"][category] = {
-                "amount": amount,
-                "percentage": percentage,
-                "recommendation": self._get_category_recommendation(category, percentage)
-            }
-        
-        return analysis
-    
-    def _get_category_recommendation(self, category: str, percentage: float) -> str:
-        """카테고리별 지출 권장사항"""
-        recommendations = {
-            "housing": {
-                "high": "주거비가 높습니다. 전세/월세 조건 재검토나 더 저렴한 지역 고려를 권장합니다.",
-                "normal": "주거비가 적절한 수준입니다.",
-                "low": "주거비가 낮아 여유가 있습니다."
-            },
-            "food": {
-                "high": "식비가 높습니다. 외식 빈도 줄이기나 식재료 구매 최적화를 권장합니다.",
-                "normal": "식비가 적절한 수준입니다.",
-                "low": "식비가 낮아 여유가 있습니다."
-            },
-            "transportation": {
-                "high": "교통비가 높습니다. 대중교통 이용이나 카풀을 고려해보세요.",
-                "normal": "교통비가 적절한 수준입니다.",
-                "low": "교통비가 낮아 여유가 있습니다."
-            }
-        }
-        
-        if category in recommendations:
-            if percentage > 40:
-                return recommendations[category]["high"]
-            elif percentage > 20:
-                return recommendations[category]["normal"]
-            else:
-                return recommendations[category]["low"]
-        
-        return "해당 카테고리의 지출을 모니터링하세요."
-    
-    def create_budget_plan(self, income: float, goals: List[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """예산 계획 수립"""
-        # 50/30/20 법칙 적용
-        needs = income * 0.5  # 필수 지출
-        wants = income * 0.3  # 선택적 지출
-        savings = income * 0.2  # 저축/투자
-        
-        budget_plan = {
-            "monthly_income": income,
-            "budget_allocation": {
-                "필수지출(50%)": needs,
-                "선택지출(30%)": wants,
-                "저축투자(20%)": savings
-            },
-            "recommendations": [
-                "필수지출은 주거비, 식비, 교통비, 보험료 등 생계에 필요한 지출입니다.",
-                "선택지출은 여가, 엔터테인먼트, 쇼핑 등 선택적 지출입니다.",
-                "저축투자는 비상금, 투자, 목표 자금 마련에 사용하세요."
-            ]
-        }
-        
-        # 목표가 있으면 추가 조언
-        if goals:
-            budget_plan["goal_based_recommendations"] = self._analyze_goals(goals, savings)
-        
-        return budget_plan
-    
-    def _analyze_goals(self, goals: List[Dict[str, Any]], monthly_savings: float) -> List[str]:
-        """목표 기반 조언 생성"""
+    def _generate_recommendations(self, data: Dict[str, Any]) -> List[str]:
+        """추천사항 생성"""
         recommendations = []
         
-        for goal in goals:
-            target_amount = goal.get('target_amount', 0)
-            target_year = goal.get('target_year', 1)
-            goal_name = goal.get('goal', '목표')
-            
-            required_monthly = target_amount / (target_year * 12)
-            
-            if required_monthly > monthly_savings:
-                recommendations.append(
-                    f"{goal_name} 목표 달성을 위해서는 월 {format_currency(required_monthly)}가 필요합니다. "
-                    f"현재 저축 가능 금액({format_currency(monthly_savings)})보다 {format_currency(required_monthly - monthly_savings)} 더 필요합니다. "
-                    "목표 기간을 늘리거나 목표 금액을 조정하는 것을 고려해보세요."
-                )
-            else:
-                recommendations.append(
-                    f"{goal_name} 목표 달성이 가능합니다. 월 {format_currency(required_monthly)}를 저축하면 목표를 달성할 수 있습니다."
-                )
+        income = data.get('income', 0)
+        expenses = data.get('expenses', 0)
+        savings = data.get('savings', 0)
+        
+        if expenses > income * 0.8:
+            recommendations.append("지출이 수입의 80%를 초과하고 있습니다. 불필요한 지출을 줄이세요.")
+        
+        if savings < expenses * 3:
+            recommendations.append("비상금이 3개월치 생활비보다 적습니다. 저축을 늘리세요.")
+        
+        if income > 0 and (income - expenses) / income < 0.2:
+            recommendations.append("저축률이 20% 미만입니다. 50/30/20 법칙을 적용해보세요.")
         
         return recommendations
+
+class ExpenseCategorizationTool(BaseTool):
+    """지출 분류 도구"""
+    
+    name: str = "expense_categorization"
+    description: str = "지출 데이터를 카테고리별로 분류하고 분석합니다."
+    
+    def _run(self, expense_data: str) -> str:
+        """지출 분류 실행"""
+        try:
+            data = json.loads(expense_data)
+            monthly_expenses = data.get('monthly_expenses', {})
+            
+            # 카테고리별 분석
+            categories = {
+                "주거비": monthly_expenses.get('housing', 0),
+                "식비": monthly_expenses.get('food', 0),
+                "교통비": monthly_expenses.get('transportation', 0),
+                "통신비": monthly_expenses.get('utilities', 0),
+                "보험료": monthly_expenses.get('insurance', 0),
+                "여가비": monthly_expenses.get('entertainment', 0),
+                "기타": monthly_expenses.get('other', 0)
+            }
+            
+            total_expenses = sum(categories.values())
+            
+            # 비율 계산
+            ratios = {k: (v / total_expenses * 100) if total_expenses > 0 else 0 
+                     for k, v in categories.items()}
+            
+            # 추천사항
+            recommendations = []
+            if ratios.get("주거비", 0) > 30:
+                recommendations.append("주거비가 30%를 초과합니다. 주거비 절약을 고려하세요.")
+            
+            if ratios.get("여가비", 0) > 20:
+                recommendations.append("여가비가 20%를 초과합니다. 여가비 지출을 조절하세요.")
+            
+            analysis = {
+                "categories": categories,
+                "ratios": ratios,
+                "total_expenses": total_expenses,
+                "recommendations": recommendations
+            }
+            
+            return json.dumps(analysis, ensure_ascii=False, indent=2)
+            
+        except Exception as e:
+            logger.error(f"지출 분류 실패: {e}")
+            return json.dumps({"error": str(e)})
+
+class SavingsPlanTool(BaseTool):
+    """저축 계획 도구"""
+    
+    name: str = "savings_plan"
+    description: str = "목표 기반 저축 계획을 수립합니다."
+    
+    def _run(self, plan_data: str) -> str:
+        """저축 계획 수립"""
+        try:
+            data = json.loads(plan_data)
+            
+            current_savings = data.get('current_savings', 0)
+            target_amount = data.get('target_amount', 0)
+            target_months = data.get('target_months', 12)
+            monthly_income = data.get('monthly_income', 0)
+            monthly_expenses = data.get('monthly_expenses', 0)
+            
+            # 필요한 월 저축액 계산
+            required_savings = (target_amount - current_savings) / target_months
+            available_savings = monthly_income - monthly_expenses
+            
+            # 계획 수립
+            plan = {
+                "required_monthly_savings": required_savings,
+                "available_savings": available_savings,
+                "feasible": available_savings >= required_savings,
+                "monthly_savings_plan": self._create_monthly_plan(data),
+                "recommendations": self._generate_savings_recommendations(data)
+            }
+            
+            return json.dumps(plan, ensure_ascii=False, indent=2)
+            
+        except Exception as e:
+            logger.error(f"저축 계획 수립 실패: {e}")
+            return json.dumps({"error": str(e)})
+    
+    def _create_monthly_plan(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """월별 저축 계획 생성"""
+        monthly_income = data.get('monthly_income', 0)
+        
+        # 50/30/20 법칙 적용
+        essential_expenses = monthly_income * 0.5  # 필수지출 50%
+        discretionary_expenses = monthly_income * 0.3  # 선택지출 30%
+        savings_investment = monthly_income * 0.2  # 저축/투자 20%
+        
+        return {
+            "essential_expenses": essential_expenses,
+            "discretionary_expenses": discretionary_expenses,
+            "savings_investment": savings_investment,
+            "description": "50/30/20 법칙에 따른 월별 예산 배분"
+        }
+    
+    def _generate_savings_recommendations(self, data: Dict[str, Any]) -> List[str]:
+        """저축 추천사항 생성"""
+        recommendations = []
+        
+        monthly_income = data.get('monthly_income', 0)
+        monthly_expenses = data.get('monthly_expenses', 0)
+        
+        if monthly_expenses > monthly_income * 0.8:
+            recommendations.append("지출을 줄여서 저축 가능 금액을 늘리세요.")
+        
+        recommendations.append("자동이체를 설정하여 매월 일정 금액을 저축하세요.")
+        recommendations.append("비상금을 먼저 확보한 후 목표 저축을 시작하세요.")
+        
+        return recommendations
+
+class BudgetAgent(BaseAgent):
+    """예산 관리 전문 에이전트"""
+    
+    def __init__(self):
+        """예산 관리 에이전트 초기화"""
+        super().__init__(
+            agent_name="예산 관리 어드바이저",
+            agent_role="개인 예산 분석, 지출 관리, 저축 계획 수립을 담당하는 전문가"
+        )
+        
+        # 전문 도구 추가
+        self.add_tool(BudgetAnalysisTool())
+        self.add_tool(ExpenseCategorizationTool())
+        self.add_tool(SavingsPlanTool())
+        
+        # 에이전트 실행기 초기화
+        self.initialize_agent_executor()
+    
+    def _extend_system_prompt(self, base_prompt: str) -> str:
+        """예산 관리 전문 프롬프트 확장"""
+        specialized_prompt = """
+예산 관리 전문가로서 다음 영역에 특화되어 있습니다:
+
+1. 예산 분석
+- 수입/지출 패턴 분석
+- 저축률 계산 및 평가
+- 재무 건강도 점수 산출
+- 비상금 적정성 평가
+
+2. 지출 관리
+- 카테고리별 지출 분석
+- 불필요한 지출 식별
+- 지출 최적화 방안 제시
+- 50/30/20 법칙 적용
+
+3. 저축 계획
+- 목표 기반 저축 계획 수립
+- 월별 저축액 계산
+- 저축 목표 달성 가능성 평가
+- 자동 저축 시스템 구축
+
+4. 재무 목표 설정
+- 단기/중기/장기 목표 설정
+- 목표 달성을 위한 로드맵 제공
+- 우선순위 기반 목표 관리
+
+답변 시 다음을 포함하세요:
+- 구체적인 수치와 계산 과정
+- 시각적 차트나 그래프 제안
+- 실행 가능한 액션 플랜
+- 정기적인 점검 방법
+"""
+        
+        return base_prompt + specialized_prompt
+    
+    def analyze_budget(self, user_data: Dict[str, Any]) -> Dict[str, Any]:
+        """예산 분석 수행"""
+        try:
+            # 예산 분석 도구 실행
+            analysis_result = self.tools[0]._run(json.dumps(user_data))
+            analysis = json.loads(analysis_result)
+            
+            # 지출 분류 분석
+            if 'monthly_expenses' in user_data:
+                expense_result = self.tools[1]._run(json.dumps(user_data))
+                expense_analysis = json.loads(expense_result)
+                analysis['expense_analysis'] = expense_analysis
+            
+            return analysis
+            
+        except Exception as e:
+            logger.error(f"예산 분석 실패: {e}")
+            return {"error": str(e)}
+    
+    def create_savings_plan(self, user_data: Dict[str, Any]) -> Dict[str, Any]:
+        """저축 계획 수립"""
+        try:
+            plan_result = self.tools[2]._run(json.dumps(user_data))
+            return json.loads(plan_result)
+            
+        except Exception as e:
+            logger.error(f"저축 계획 수립 실패: {e}")
+            return {"error": str(e)}
+    
+    def get_budget_recommendations(self, user_data: Dict[str, Any]) -> List[str]:
+        """예산 관련 추천사항 생성"""
+        recommendations = []
+        
+        # 기본 분석
+        analysis = self.analyze_budget(user_data)
+        if 'recommendations' in analysis:
+            recommendations.extend(analysis['recommendations'])
+        
+        # 지출 분석
+        if 'expense_analysis' in analysis:
+            expense_recs = analysis['expense_analysis'].get('recommendations', [])
+            recommendations.extend(expense_recs)
+        
+        # 저축 계획
+        savings_plan = self.create_savings_plan(user_data)
+        if 'recommendations' in savings_plan:
+            recommendations.extend(savings_plan['recommendations'])
+        
+        return list(set(recommendations))  # 중복 제거
+    
+    def get_specialized_tools(self) -> List[BaseTool]:
+        """전문 도구 목록 반환"""
+        return [
+            BudgetAnalysisTool(),
+            ExpenseCategorizationTool(),
+            SavingsPlanTool()
+        ]
+    
+    def get_specialized_prompt(self) -> str:
+        """전문 프롬프트 반환"""
+        return """
+당신은 예산 관리 전문가입니다. 다음 영역에서 전문성을 발휘하세요:
+
+1. 예산 분석 및 진단
+2. 지출 패턴 분석
+3. 저축 계획 수립
+4. 재무 목표 설정
+5. 예산 최적화 방안 제시
+
+항상 구체적이고 실행 가능한 조언을 제공하세요.
+"""

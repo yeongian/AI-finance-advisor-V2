@@ -1,161 +1,200 @@
 """
-공통 유틸리티 함수들
+유틸리티 함수 모듈
+공통으로 사용되는 유틸리티 함수들을 제공합니다.
 """
 
 import logging
-import os
-from datetime import datetime
-from typing import Dict, List, Any, Optional
 import json
+import re
+from datetime import datetime, timedelta
+from typing import Dict, List, Any, Optional
+from pathlib import Path
 import pandas as pd
+import yfinance as yf
 
-def setup_logging(log_file: str = "./logs/finance_advisor.log", log_level: str = "INFO"):
-    """로깅 설정"""
-    os.makedirs(os.path.dirname(log_file), exist_ok=True)
-    
+from .config import settings
+
+# 로깅 설정
+def setup_logging():
+    """로깅 설정을 초기화합니다."""
     logging.basicConfig(
-        level=getattr(logging, log_level.upper()),
+        level=getattr(logging, settings.log_level),
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler(log_file, encoding='utf-8'),
+            logging.FileHandler(settings.log_file),
             logging.StreamHandler()
         ]
     )
-    
-    return logging.getLogger(__name__)
 
-def format_currency(amount: float, currency: str = "KRW") -> str:
-    """통화 포맷팅"""
-    if currency == "KRW":
-        return f"{amount:,.0f}원"
-    elif currency == "USD":
-        return f"${amount:,.2f}"
-    else:
-        return f"{amount:,.2f} {currency}"
+# 금융 데이터 유틸리티
+def get_stock_data(symbol: str, period: str = "1y") -> pd.DataFrame:
+    """주식 데이터를 가져옵니다."""
+    try:
+        ticker = yf.Ticker(symbol)
+        data = ticker.history(period=period)
+        return data
+    except Exception as e:
+        logging.error(f"주식 데이터 가져오기 실패: {symbol}, 오류: {e}")
+        return pd.DataFrame()
 
-def calculate_percentage_change(old_value: float, new_value: float) -> float:
-    """백분율 변화 계산"""
-    if old_value == 0:
-        return 0
-    return ((new_value - old_value) / old_value) * 100
+def calculate_returns(prices: pd.Series) -> Dict[str, float]:
+    """수익률을 계산합니다."""
+    if len(prices) < 2:
+        return {"total_return": 0.0, "annualized_return": 0.0}
+    
+    total_return = (prices.iloc[-1] - prices.iloc[0]) / prices.iloc[0]
+    days = (prices.index[-1] - prices.index[0]).days
+    annualized_return = ((prices.iloc[-1] / prices.iloc[0]) ** (365 / days)) - 1
+    
+    return {
+        "total_return": total_return * 100,
+        "annualized_return": annualized_return * 100
+    }
 
-def validate_user_input(data: Dict[str, Any]) -> Dict[str, Any]:
-    """사용자 입력 데이터 검증"""
-    validated_data = {}
-    
-    # 필수 필드 검증
-    required_fields = ['age', 'income', 'expenses']
-    for field in required_fields:
-        if field not in data:
-            raise ValueError(f"필수 필드가 누락되었습니다: {field}")
-    
-    # 데이터 타입 및 범위 검증
-    if not isinstance(data['age'], int) or data['age'] < 18 or data['age'] > 100:
-        raise ValueError("나이는 18-100 사이의 정수여야 합니다.")
-    
-    if not isinstance(data['income'], (int, float)) or data['income'] < 0:
-        raise ValueError("소득은 0 이상의 숫자여야 합니다.")
-    
-    if not isinstance(data['expenses'], (int, float)) or data['expenses'] < 0:
-        raise ValueError("지출은 0 이상의 숫자여야 합니다.")
-    
-    return data
+def format_currency(amount: float) -> str:
+    """금액을 통화 형식으로 포맷합니다."""
+    return f"₩{amount:,.0f}"
 
-def save_user_data(user_id: str, data: Dict[str, Any], file_path: str = "./data/user_data/"):
-    """사용자 데이터 저장"""
-    os.makedirs(file_path, exist_ok=True)
+def format_percentage(value: float) -> str:
+    """백분율을 포맷합니다."""
+    return f"{value:.2f}%"
+
+# 텍스트 처리 유틸리티
+def clean_text(text: str) -> str:
+    """텍스트를 정리합니다."""
+    # 불필요한 공백 제거
+    text = re.sub(r'\s+', ' ', text.strip())
+    # 특수 문자 정리
+    text = re.sub(r'[^\w\s\-.,!?()]', '', text)
+    return text
+
+def extract_numbers(text: str) -> List[float]:
+    """텍스트에서 숫자를 추출합니다."""
+    numbers = re.findall(r'\d+\.?\d*', text)
+    return [float(num) for num in numbers]
+
+def extract_currency(text: str) -> Optional[float]:
+    """텍스트에서 통화 금액을 추출합니다."""
+    # ₩, $, € 등의 통화 기호와 숫자 패턴 찾기
+    patterns = [
+        r'₩\s*([\d,]+\.?\d*)',
+        r'\$\s*([\d,]+\.?\d*)',
+        r'€\s*([\d,]+\.?\d*)',
+        r'([\d,]+\.?\d*)\s*원',
+        r'([\d,]+\.?\d*)\s*달러',
+    ]
     
-    filename = f"{user_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-    file_path = os.path.join(file_path, filename)
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            amount_str = match.group(1).replace(',', '')
+            return float(amount_str)
     
-    with open(file_path, 'w', encoding='utf-8') as f:
+    return None
+
+# 날짜 유틸리티
+def parse_date(date_str: str) -> Optional[datetime]:
+    """날짜 문자열을 파싱합니다."""
+    formats = [
+        '%Y-%m-%d',
+        '%Y/%m/%d',
+        '%d/%m/%Y',
+        '%m/%d/%Y',
+        '%Y년 %m월 %d일',
+    ]
+    
+    for fmt in formats:
+        try:
+            return datetime.strptime(date_str, fmt)
+        except ValueError:
+            continue
+    
+    return None
+
+def get_age_from_birthdate(birthdate: datetime) -> int:
+    """생년월일로부터 나이를 계산합니다."""
+    today = datetime.now()
+    age = today.year - birthdate.year
+    if today.month < birthdate.month or (today.month == birthdate.month and today.day < birthdate.day):
+        age -= 1
+    return age
+
+# 파일 유틸리티
+def save_json(data: Dict[str, Any], filepath: str):
+    """데이터를 JSON 파일로 저장합니다."""
+    with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-    
-    return file_path
 
-def load_user_data(user_id: str, file_path: str = "./data/user_data/") -> Optional[Dict[str, Any]]:
-    """사용자 데이터 로드"""
-    # 가장 최근 파일 찾기
-    files = [f for f in os.listdir(file_path) if f.startswith(user_id)]
-    if not files:
-        return None
-    
-    latest_file = max(files, key=lambda x: os.path.getctime(os.path.join(file_path, x)))
-    
-    with open(os.path.join(file_path, latest_file), 'r', encoding='utf-8') as f:
+def load_json(filepath: str) -> Dict[str, Any]:
+    """JSON 파일을 로드합니다."""
+    with open(filepath, 'r', encoding='utf-8') as f:
         return json.load(f)
 
-def create_sample_data() -> Dict[str, Any]:
-    """샘플 사용자 데이터 생성"""
-    return {
-        "user_id": "sample_user",
-        "age": 30,
-        "income": 50000000,  # 5천만원
-        "expenses": 30000000,  # 3천만원
-        "savings": 100000000,  # 1억원
-        "investment_risk_tolerance": "moderate",  # low, moderate, high
-        "financial_goals": [
-            {"goal": "집 구매", "target_amount": 500000000, "target_year": 5},
-            {"goal": "은퇴 준비", "target_amount": 1000000000, "target_year": 30}
-        ],
-        "current_investments": {
-            "stocks": 20000000,
-            "bonds": 10000000,
-            "real_estate": 0,
-            "crypto": 0
-        },
-        "monthly_expenses": {
-            "housing": 8000000,
-            "food": 500000,
-            "transportation": 300000,
-            "entertainment": 200000,
-            "utilities": 200000,
-            "insurance": 300000,
-            "other": 1000000
-        }
-    }
+def ensure_file_exists(filepath: str, default_content: str = ""):
+    """파일이 존재하지 않으면 생성합니다."""
+    path = Path(filepath)
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(default_content)
 
-def calculate_basic_metrics(income: float, expenses: float, savings: float) -> Dict[str, Any]:
-    """기본 재무 지표 계산"""
-    net_income = income - expenses
-    savings_rate = (net_income / income) * 100 if income > 0 else 0
-    emergency_fund_months = (savings / expenses) if expenses > 0 else 0
-    
-    return {
-        "net_income": net_income,
-        "savings_rate": savings_rate,
-        "emergency_fund_months": emergency_fund_months,
-        "debt_to_income_ratio": 0,  # 부채 정보가 없으므로 0
-        "financial_health_score": min(100, max(0, savings_rate * 2 + min(emergency_fund_months * 10, 40)))
-    }
+# 검증 유틸리티
+def validate_email(email: str) -> bool:
+    """이메일 형식을 검증합니다."""
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(pattern, email) is not None
 
-def get_financial_advice_category(user_query: str) -> str:
-    """사용자 질의를 기반으로 재무 상담 카테고리 분류"""
-    query_lower = user_query.lower()
-    
-    if any(word in query_lower for word in ['예산', '지출', '수입', '저축']):
-        return "budget"
-    elif any(word in query_lower for word in ['투자', '주식', '펀드', '포트폴리오']):
-        return "investment"
-    elif any(word in query_lower for word in ['세금', '공제', '연말정산']):
-        return "tax"
-    elif any(word in query_lower for word in ['부동산', '집', '아파트']):
-        return "real_estate"
-    elif any(word in query_lower for word in ['은퇴', '연금', '노후']):
-        return "retirement"
-    else:
-        return "general"
+def validate_phone(phone: str) -> bool:
+    """전화번호 형식을 검증합니다."""
+    # 한국 전화번호 형식 (010-1234-5678, 02-123-4567 등)
+    pattern = r'^(\d{2,3})-?(\d{3,4})-?(\d{4})$'
+    return re.match(pattern, phone) is not None
 
-def format_financial_advice(advice: str, category: str) -> str:
-    """재무 조언 포맷팅"""
-    category_emojis = {
-        "budget": "💰",
-        "investment": "📈",
-        "tax": "📋",
-        "real_estate": "🏠",
-        "retirement": "🎯",
-        "general": "💡"
-    }
+def validate_ssn(ssn: str) -> bool:
+    """주민등록번호 형식을 검증합니다."""
+    # 주민등록번호 형식 (123456-1234567)
+    pattern = r'^\d{6}-\d{7}$'
+    if not re.match(pattern, ssn):
+        return False
     
-    emoji = category_emojis.get(category, "💡")
-    return f"{emoji} **{category.upper()} 조언**\n\n{advice}"
+    # 체크섬 검증
+    ssn = ssn.replace('-', '')
+    weights = [2, 3, 4, 5, 6, 7, 8, 9, 2, 3, 4, 5]
+    
+    checksum = sum(int(ssn[i]) * weights[i] for i in range(12))
+    remainder = checksum % 11
+    check_digit = (11 - remainder) % 10
+    
+    return int(ssn[12]) == check_digit
+
+# 보안 유틸리티
+def mask_sensitive_data(text: str, data_type: str = "ssn") -> str:
+    """민감한 데이터를 마스킹합니다."""
+    if data_type == "ssn":
+        # 주민등록번호 마스킹 (123456-*******)
+        return re.sub(r'(\d{6})-\d{7}', r'\1-*******', text)
+    elif data_type == "phone":
+        # 전화번호 마스킹 (010-****-5678)
+        return re.sub(r'(\d{3})-\d{4}-(\d{4})', r'\1-****-\2', text)
+    elif data_type == "email":
+        # 이메일 마스킹 (a***@example.com)
+        return re.sub(r'(\w{1})\w+(@\w+\.\w+)', r'\1***\2', text)
+    
+    return text
+
+# 성능 유틸리티
+def measure_time(func):
+    """함수 실행 시간을 측정하는 데코레이터"""
+    import time
+    
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        result = func(*args, **kwargs)
+        end_time = time.time()
+        logging.info(f"{func.__name__} 실행 시간: {end_time - start_time:.2f}초")
+        return result
+    
+    return wrapper
+
+# 초기화
+setup_logging()
