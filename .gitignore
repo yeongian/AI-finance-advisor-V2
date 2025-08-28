@@ -1,9 +1,28 @@
+# ================================================
+# AI 재무관리 어드바이저 - Git 무시 파일 목록
+# ================================================
+
+# ================================================
+# 보안 관련 파일 (절대 커밋 금지!)
+# ================================================
 # 환경변수 파일 (API 키 포함)
 .env
 .env.local
 .env.production
+.env.development
+.env.test
 
-# Python
+# API 키 및 인증 파일
+*.key
+*.pem
+*.p12
+*.pfx
+secrets.json
+credentials.json
+
+# ================================================
+# Python 관련
+# ================================================
 __pycache__/
 *.py[cod]
 *$py.class
@@ -26,110 +45,99 @@ wheels/
 *.egg
 MANIFEST
 
-# PyInstaller
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-.hypothesis/
-.pytest_cache/
-
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-
-# Flask stuff:
-instance/
-.webassets-cache
-
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# pyenv
-.python-version
-
-# celery beat schedule file
-celerybeat-schedule
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
+# ================================================
+# 가상환경
+# ================================================
 .venv
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+.conda/
 
-# Spyder project settings
-.spyderproject
-.spyproject
+# ================================================
+# 데이터베이스 및 데이터 파일
+# ================================================
+*.db
+*.sqlite
+*.sqlite3
+data/vector_store/
+data/chroma_db/
+data/faiss_index/
+logs/*.log
+*.log
 
-# Rope project settings
-.ropeproject
+# ================================================
+# 캐시 및 임시 파일
+# ================================================
+.cache/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+*.cover
+.hypothesis/
 
-# mkdocs documentation
-/site
-
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# IDE
+# ================================================
+# IDE 및 편집기
+# ================================================
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-
-# OS
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
 
-# 프로젝트 특정
+# ================================================
+# 테스트 관련
+# ================================================
+test_*.py
+*_test.py
+.pytest_cache/
+.coverage
+coverage.xml
+*.cover
+
+# ================================================
+# 문서 및 빌드
+# ================================================
+docs/_build/
+site/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ================================================
+# 배포 관련
+# ================================================
+docker-compose.override.yml
+.dockerignore
+*.tar.gz
+*.zip
+
+# ================================================
+# 로그 파일
+# ================================================
 logs/
 *.log
-data/user_data/
-vector_db/
-*.db
-*.sqlite
-*.sqlite3
+app.log
+streamlit_app.log
+api_server.log
 
+# ================================================
+# 모니터링 및 메트릭
+# ================================================
+metrics/
+prometheus_data/
+grafana_data/
+
+# ================================================
 # 임시 파일
-temp/
+# ================================================
 tmp/
+temp/
 *.tmp
 *.temp

@@ -7,11 +7,27 @@ AI 부트캠프 과제를 위한 완성된 웹 인터페이스
 import streamlit as st
 import requests
 import json
+import logging
 from datetime import datetime
 import time
 import sys
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# 환경 변수 로딩
+load_dotenv()
+
+# 로깅 설정
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('logs/streamlit_app.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # 페이지 설정 - 성능 최적화
 st.set_page_config(
@@ -22,33 +38,61 @@ st.set_page_config(
 )
 
 # API 설정
-API_BASE_URL = "http://localhost:8000"
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
+API_TIMEOUT = int(os.getenv("API_TIMEOUT", "30"))
+CACHE_TTL = int(os.getenv("CACHE_TTL", "300"))
 
-# 캐싱 설정
-@st.cache_data(ttl=300)  # 5분 캐시
-def check_api_health():
-    """API 서버 상태 확인 (캐싱 적용)"""
+# 통합 API 호출 함수
+def make_api_request(method: str, endpoint: str, data: dict = None, timeout: int = None) -> dict:
+    """통합 API 호출 함수 (에러 처리 및 로깅 포함)"""
+    if timeout is None:
+        timeout = API_TIMEOUT
+    
+    url = f"{API_BASE_URL}{endpoint}"
+    
     try:
-        response = requests.get(f"{API_BASE_URL}/health", timeout=3)  # 타임아웃 단축
-        return response.status_code == 200
-    except:
-        return False
-
-@st.cache_data(ttl=60)  # 1분 캐시
-def call_api(endpoint, data=None):
-    """API 호출 (캐싱 적용)"""
-    try:
-        if data:
-            response = requests.post(f"{API_BASE_URL}{endpoint}", json=data, timeout=15)  # 타임아웃 단축
+        logger.info(f"API 요청: {method} {url}")
+        start_time = time.time()
+        
+        if method.upper() == "GET":
+            response = requests.get(url, timeout=timeout)
+        elif method.upper() == "POST":
+            response = requests.post(url, json=data, timeout=timeout)
         else:
-            response = requests.get(f"{API_BASE_URL}{endpoint}", timeout=15)
+            raise ValueError(f"지원하지 않는 HTTP 메서드: {method}")
+        
+        elapsed_time = time.time() - start_time
+        logger.info(f"API 응답: {response.status_code} ({elapsed_time:.2f}초)")
         
         if response.status_code == 200:
             return response.json()
         else:
+            logger.error(f"API 오류: {response.status_code} - {response.text}")
             return None
-    except Exception as e:
+            
+    except requests.exceptions.Timeout:
+        logger.error(f"API 타임아웃: {url}")
         return None
+    except requests.exceptions.ConnectionError:
+        logger.error(f"API 연결 오류: {url}")
+        return None
+    except Exception as e:
+        logger.error(f"API 요청 실패: {e}")
+        return None
+
+# 캐싱 설정
+@st.cache_data(ttl=CACHE_TTL)
+def check_api_health():
+    """API 서버 상태 확인 (캐싱 적용)"""
+    return make_api_request("GET", "/health", timeout=5) is not None
+
+@st.cache_data(ttl=60)  # 1분 캐시
+def call_api(endpoint, data=None):
+    """API 호출 (캐싱 적용)"""
+    if data:
+        return make_api_request("POST", endpoint, data)
+    else:
+        return make_api_request("GET", endpoint)
 
 def format_currency(amount):
     """통화 포맷팅"""
@@ -65,6 +109,8 @@ if 'user_query' not in st.session_state:
     st.session_state.user_query = ""
 if 'api_checked' not in st.session_state:
     st.session_state.api_checked = False
+if 'app_start_time' not in st.session_state:
+    st.session_state.app_start_time = time.time()
 
 def render_project_info_tab():
     """프로젝트 정보 탭"""
