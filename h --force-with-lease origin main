@@ -1,0 +1,3 @@
+[33ma6d4daa[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m 🔧 multi_agent_system.py 개선 및 안정성 강화
+[33mcda63cf[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m  프로젝트 구조 개선 및 main.py 통합
+[33m769f1b6[m Fix indentation errors in multi_agent_system.py and remove test files

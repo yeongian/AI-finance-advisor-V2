@@ -13,10 +13,11 @@ from langchain.schema import HumanMessage, AIMessage
 from langchain.memory import ConversationBufferMemory
 from langchain_community.chat_models import AzureChatOpenAI
 from langgraph.graph import StateGraph, END
-# ToolExecutor는 사용하지 않으므로 제거
+from langgraph.prebuilt import create_react_agent
 from langchain.tools import BaseTool
 from langchain.agents import AgentExecutor, create_openai_functions_agent
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langgraph.func import entrypoint
 
 from .budget_agent import BudgetAnalysisTool, ExpenseCategorizationTool, SavingsPlanTool
 from .investment_agent import PortfolioAnalysisTool, InvestmentRecommendationTool, MarketAnalysisTool
@@ -43,7 +44,7 @@ class MultiAgentSystem:
     def __init__(self):
         self.llm = None
         self.knowledge_base = None
-        self.agents = {}
+        self.agents = {}  # 명시적 초기화
         self.memories = {}
         self.agent_executors = {}
         self.workflow = None
@@ -74,14 +75,20 @@ class MultiAgentSystem:
             # 에이전트 초기화
             agent_start_time = time.time()
             logger.info("👥 에이전트 초기화 중...")
-            self._initialize_agents()
+            success = self._initialize_agents()
+            if not success:
+                logger.error("❌ 에이전트 초기화 실패")
+                return False
             agent_elapsed = time.time() - agent_start_time
             logger.info(f"✅ 에이전트 초기화 완료: {agent_elapsed:.2f}초")
             
             # 워크플로우 생성
             workflow_start_time = time.time()
             logger.info("🔄 워크플로우 생성 중...")
-            self._create_workflow()
+            success = self._create_workflow()
+            if not success:
+                logger.error("❌ 워크플로우 생성 실패")
+                return False
             workflow_elapsed = time.time() - workflow_start_time
             logger.info(f"✅ 워크플로우 생성 완료: {workflow_elapsed:.2f}초")
             
@@ -94,7 +101,7 @@ class MultiAgentSystem:
             logger.error(f"❌ Multi Agent 시스템 초기화 실패: {e}")
             return False
     
-    def _initialize_agents(self):
+    def _initialize_agents(self) -> bool:
         """각 전문 에이전트 초기화"""
         try:
             # 예산 관리 에이전트
@@ -105,7 +112,11 @@ class MultiAgentSystem:
                 ExpenseCategorizationTool(),
                 SavingsPlanTool()
             ]
-            self.agents["budget"] = self._create_agent("budget", budget_tools)
+            budget_agent = self._create_agent("budget", budget_tools)
+            if budget_agent is None:
+                logger.error("❌ 예산 관리 에이전트 생성 실패")
+                return False
+            self.agents["budget"] = budget_agent
             budget_elapsed = time.time() - budget_start_time
             logger.info(f"✅ 예산 관리 에이전트 완료: {budget_elapsed:.2f}초")
             
@@ -117,19 +128,27 @@ class MultiAgentSystem:
                 InvestmentRecommendationTool(),
                 MarketAnalysisTool()
             ]
-            self.agents["investment"] = self._create_agent("investment", investment_tools)
+            investment_agent = self._create_agent("investment", investment_tools)
+            if investment_agent is None:
+                logger.error("❌ 투자 관리 에이전트 생성 실패")
+                return False
+            self.agents["investment"] = investment_agent
             investment_elapsed = time.time() - investment_start_time
             logger.info(f"✅ 투자 관리 에이전트 완료: {investment_elapsed:.2f}초")
             
             # 세금 관리 에이전트
             tax_start_time = time.time()
-            logger.info("💰 세금 관리 에이전트 초기화 중...")
+            logger.info("🧾 세금 관리 에이전트 초기화 중...")
             tax_tools = [
                 TaxDeductionAnalysisTool(),
                 InvestmentTaxAnalysisTool(),
                 BusinessTaxAnalysisTool()
             ]
-            self.agents["tax"] = self._create_agent("tax", tax_tools)
+            tax_agent = self._create_agent("tax", tax_tools)
+            if tax_agent is None:
+                logger.error("❌ 세금 관리 에이전트 생성 실패")
+                return False
+            self.agents["tax"] = tax_agent
             tax_elapsed = time.time() - tax_start_time
             logger.info(f"✅ 세금 관리 에이전트 완료: {tax_elapsed:.2f}초")
             
@@ -141,14 +160,20 @@ class MultiAgentSystem:
                 PensionProductAnalysisTool(),
                 RetirementRoadmapTool()
             ]
-            self.agents["retirement"] = self._create_agent("retirement", retirement_tools)
+            retirement_agent = self._create_agent("retirement", retirement_tools)
+            if retirement_agent is None:
+                logger.error("❌ 은퇴 관리 에이전트 생성 실패")
+                return False
+            self.agents["retirement"] = retirement_agent
             retirement_elapsed = time.time() - retirement_start_time
             logger.info(f"✅ 은퇴 관리 에이전트 완료: {retirement_elapsed:.2f}초")
             
-            logger.info(f"{len(self.agents)}개의 전문 에이전트 초기화 완료")
+            logger.info(f"✅ {len(self.agents)}개의 전문 에이전트 초기화 완료")
+            return True
             
         except Exception as e:
-            logger.error(f"에이전트 초기화 실패: {e}")
+            logger.error(f"❌ 에이전트 초기화 실패: {e}")
+            return False
     
     def _create_agent(self, agent_type: str, tools: List[BaseTool]) -> AgentExecutor:
         """개별 에이전트 생성"""
@@ -219,7 +244,7 @@ Human: {input}
             logger.error(f"{agent_type} 에이전트 생성 실패: {e}")
             return None
     
-    def _create_workflow(self):
+    def _create_workflow(self) -> bool:
         """에이전트 워크플로우 생성"""
         try:
             # 상태 그래프 생성
@@ -243,17 +268,25 @@ Human: {input}
             workflow.set_entry_point("coordinator")
             
             self.workflow = workflow.compile()
-            logger.info("에이전트 워크플로우 생성 완료")
+            logger.info("✅ 에이전트 워크플로우 생성 완료")
+            return True
             
         except Exception as e:
-            logger.error(f"워크플로우 생성 실패: {e}")
+            logger.error(f"❌ 워크플로우 생성 실패: {e}")
+            return False
+            return False
     
     def process_query(self, query: str, user_data: Dict[str, Any] = None) -> Dict[str, Any]:
         """사용자 쿼리 처리"""
         try:
             if not self.is_initialized:
-                logger.warning("Multi Agent 시스템이 초기화되지 않았습니다.")
+                logger.warning("⚠️ Multi Agent 시스템이 초기화되지 않았습니다.")
                 return {"error": "시스템이 초기화되지 않았습니다."}
+            
+            # self.agents 초기화 확인
+            if not self.agents:
+                logger.error("❌ 에이전트가 초기화되지 않았습니다.")
+                return {"error": "에이전트가 초기화되지 않았습니다."}
             
             # RAG를 통한 관련 컨텍스트 검색
             context = self.knowledge_base.get_relevant_context(query) if self.knowledge_base else ""
@@ -263,38 +296,50 @@ Human: {input}
             
             if agent_type in self.agents:
                 # 특정 에이전트로 처리
-                result = self.agents[agent_type].invoke({
-                    "input": f"컨텍스트: {context}\n\n사용자 질문: {query}",
-                    "user_data": user_data or {}
-                })
-                
-                return {
-                    "answer": result.get("output", ""),
-                    "agent_type": agent_type,
-                    "confidence": 0.9,
-                    "context_used": bool(context)
-                }
+                try:
+                    result = self.agents[agent_type].invoke({
+                        "input": f"컨텍스트: {context}\n\n사용자 질문: {query}",
+                        "user_data": user_data or {}
+                    })
+                    
+                    return {
+                        "answer": result.get("output", ""),
+                        "agent_type": agent_type,
+                        "confidence": 0.9,
+                        "context_used": bool(context)
+                    }
+                except Exception as e:
+                    logger.error(f"❌ {agent_type} 에이전트 처리 실패: {e}")
+                    return {"error": f"{agent_type} 에이전트 처리 중 오류가 발생했습니다."}
             else:
                 # 워크플로우를 통한 종합 처리
-                state = AgentState(
-                    query=query,
-                    user_data=user_data or {},
-                    context=context,
-                    results={}
-                )
+                if self.workflow is None:
+                    logger.error("❌ 워크플로우가 초기화되지 않았습니다.")
+                    return {"error": "워크플로우가 초기화되지 않았습니다."}
                 
-                final_state = self.workflow.invoke(state)
-                
-                return {
-                    "answer": final_state.results.get("final_answer", ""),
-                    "agent_type": "comprehensive",
-                    "confidence": 0.8,
-                    "context_used": bool(context),
-                    "agent_results": final_state.results
-                }
+                try:
+                    state = AgentState(
+                        query=query,
+                        user_data=user_data or {},
+                        context=context,
+                        results={}
+                    )
+                    
+                    final_state = self.workflow.invoke(state)
+                    
+                    return {
+                        "answer": final_state.results.get("final_answer", ""),
+                        "agent_type": "comprehensive",
+                        "confidence": 0.8,
+                        "context_used": bool(context),
+                        "agent_results": final_state.results
+                    }
+                except Exception as e:
+                    logger.error(f"❌ 워크플로우 처리 실패: {e}")
+                    return {"error": "워크플로우 처리 중 오류가 발생했습니다."}
             
         except Exception as e:
-            logger.error(f"쿼리 처리 실패: {e}")
+            logger.error(f"❌ 쿼리 처리 실패: {e}")
             return {"error": f"처리 중 오류가 발생했습니다: {str(e)}"}
     
     def _classify_query(self, query: str) -> str:
@@ -477,15 +522,52 @@ Human: {input}
             "is_initialized": self.is_initialized,
             "agent_count": len(self.agents),
             "agents": list(self.agents.keys()),
-            "workflow_exists": self.workflow is not None
+            "workflow_exists": self.workflow is not None,
+            "agent_status": {
+                agent_name: {
+                    "initialized": agent is not None,
+                    "has_memory": hasattr(agent, 'memory') if agent else False
+                }
+                for agent_name, agent in self.agents.items()
+            }
         }
+    
+    @entrypoint()
+    def multi_agent_workflow(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """LangGraph entrypoint를 활용한 멀티 에이전트 워크플로우"""
+        try:
+            if not self.is_initialized:
+                return {"error": "시스템이 초기화되지 않았습니다."}
+            
+            if not messages:
+                return {"error": "메시지가 없습니다."}
+            
+            # 마지막 메시지에서 쿼리 추출
+            last_message = messages[-1]
+            query = last_message.get("content", "")
+            user_data = last_message.get("user_data", {})
+            
+            # 기존 process_query 메서드 활용
+            return self.process_query(query, user_data)
+            
+        except Exception as e:
+            logger.error(f"❌ 멀티 에이전트 워크플로우 실행 실패: {e}")
+            return {"error": f"워크플로우 실행 중 오류가 발생했습니다: {str(e)}"}
     
     def clear_all_memories(self):
         """모든 에이전트의 메모리 초기화"""
         try:
-        for agent in self.agents.values():
-                if hasattr(agent, 'memory'):
+            if not self.agents:
+                logger.warning("⚠️ 초기화할 에이전트가 없습니다.")
+                return
+            
+            cleared_count = 0
+            for agent_name, agent in self.agents.items():
+                if hasattr(agent, 'memory') and agent.memory is not None:
                     agent.memory.clear()
-        logger.info("모든 에이전트의 메모리가 초기화되었습니다.")
+                    cleared_count += 1
+                    logger.info(f"✅ {agent_name} 에이전트 메모리 초기화 완료")
+            
+            logger.info(f"✅ 총 {cleared_count}개 에이전트의 메모리가 초기화되었습니다.")
         except Exception as e:
-            logger.error(f"메모리 초기화 실패: {e}")
+            logger.error(f"❌ 메모리 초기화 실패: {e}")
