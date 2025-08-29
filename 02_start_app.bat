@@ -9,10 +9,15 @@ echo [1/4] Environment Variables Setup...
 if exist .env (
     echo OK .env file exists.
 ) else (
-    echo WARNING .env file not found. Please create .env file with your API keys.
-    echo See env_example.txt for reference.
-    pause
-    exit /b 1
+    echo WARNING .env file not found. Setting environment variables directly...
+    set AOAI_ENDPOINT=https://skcc-atl-dev-openai-01.openai.azure.com/
+    set AOAI_API_KEY=5kWBVPecvaqFeiB3PJYXnfkMHclg66duBhVXY5lWE9z187WonAnAJQQJ99BBACYeBjFXJ3w3AAABACOGqwfl
+    set AOAI_DEPLOY_GPT4O_MINI=gpt-4o-mini
+    set AOAI_DEPLOY_GPT4O=gpt-4o
+    set AOAI_DEPLOY_EMBED_3_LARGE=text-embedding-3-large
+    set AOAI_DEPLOY_EMBED_3_SMALL=text-embedding-3-small
+    set AOAI_DEPLOY_EMBED_ADA=text-embedding-ada-002
+    echo OK Environment variables set.
 )
 
 echo.
