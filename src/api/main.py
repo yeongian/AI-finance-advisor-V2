@@ -17,6 +17,9 @@ import uvicorn
 from ..core.config import settings
 from ..rag.knowledge_base import KnowledgeBase
 from ..agents.multi_agent_system import MultiAgentSystem
+from .enhanced_endpoints import router as enhanced_router
+from .advanced_tool_endpoints import router as advanced_tool_router
+from .langgraph_endpoints import router as langgraph_router
 
 # 로깅 설정
 logging.basicConfig(
@@ -51,6 +54,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 향상된 기능 라우터 추가
+app.include_router(enhanced_router)
+
+# 고급 Tool Calling 기능 라우터 추가
+app.include_router(advanced_tool_router)
+
+# LangGraph 기능 라우터 추가
+app.include_router(langgraph_router)
 
 # 전역 변수
 knowledge_base = None

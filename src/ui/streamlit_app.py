@@ -14,7 +14,7 @@ import time
 
 # 페이지 설정 - 간단한 버전으로 수정
 st.set_page_config(
-    page_title="AI 재무관리 어드바이저",
+    page_title="AI Finance Advisor",
     page_icon="💰",
     layout="wide"
 )
