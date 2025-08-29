@@ -13,6 +13,10 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.schema import Document
+from ..core.api_config import (
+    AOAI_ENDPOINT, AOAI_API_KEY, AOAI_DEPLOY_EMBED_3_SMALL,
+    AOAI_API_VERSION, validate_api_config, get_endpoint_url
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,24 +44,21 @@ class KnowledgeBase:
             embed_start_time = time.time()
             logger.info("[EMBED] OpenAI 임베딩 초기화 중...")
             
-            # 환경 변수 확인
-            api_key = os.getenv("AOAI_API_KEY")
-            endpoint = os.getenv("AOAI_ENDPOINT")
-            deployment = os.getenv("AOAI_DEPLOY_EMBED_3_SMALL")
-            
-            if not api_key or not endpoint or not deployment:
-                logger.error("[ERROR] Azure OpenAI 설정이 누락되었습니다. .env 파일을 확인하세요.")
-                logger.error(f"API_KEY: {'설정됨' if api_key else '누락'}")
-                logger.error(f"ENDPOINT: {'설정됨' if endpoint else '누락'}")
-                logger.error(f"DEPLOYMENT: {'설정됨' if deployment else '누락'}")
+            # 강의자료 방식의 API 설정 검증
+            try:
+                validate_api_config()
+                logger.info("[OK] API 설정 검증 완료")
+            except ValueError as e:
+                logger.error(f"[ERROR] API 설정 검증 실패: {e}")
                 return False
             
             try:
+                endpoint_url = get_endpoint_url()
                 self.embeddings = OpenAIEmbeddings(
-                    openai_api_key=api_key,
-                    openai_api_base=endpoint,
-                    openai_api_version="2024-02-15-preview",
-                    deployment=deployment
+                    openai_api_key=AOAI_API_KEY,
+                    openai_api_base=endpoint_url,
+                    openai_api_version=AOAI_API_VERSION,
+                    deployment=AOAI_DEPLOY_EMBED_3_SMALL
                 )
                 embed_elapsed = time.time() - embed_start_time
                 logger.info(f"[OK] 임베딩 초기화 완료: {embed_elapsed:.2f}초")

@@ -82,19 +82,19 @@ def make_api_request(method: str, endpoint: str, data: dict = None, timeout: int
             if attempt < API_RETRY_COUNT - 1:
                 time.sleep(API_RETRY_DELAY)
                 continue
-            return None
+            return {"error": f"API 타임아웃 (시도 {attempt + 1}): {timeout}초 초과"}
         except requests.exceptions.ConnectionError:
             logger.error(f"API 연결 오류 (시도 {attempt + 1}): {url}")
             if attempt < API_RETRY_COUNT - 1:
                 time.sleep(API_RETRY_DELAY)
                 continue
-            return None
+            return {"error": f"API 서버 연결 실패 (시도 {attempt + 1}): 서버가 실행되지 않았거나 네트워크 문제"}
         except Exception as e:
             logger.error(f"API 요청 실패 (시도 {attempt + 1}): {e}")
             if attempt < API_RETRY_COUNT - 1:
                 time.sleep(API_RETRY_DELAY)
                 continue
-            return None
+            return {"error": f"API 요청 실패 (시도 {attempt + 1}): {str(e)}"}
     
     return None
 
@@ -418,9 +418,50 @@ def render_ai_consultation_tab():
                 st.session_state.user_query = ""
                 
             else:
-                st.error("❌ 답변을 생성할 수 없습니다. API 서버를 확인해주세요.")
-                if response:
-                    st.write(f"API 응답: {response}")
+                st.error("❌ 답변을 생성할 수 없습니다.")
+                
+                # 상세한 에러 정보 표시
+                st.markdown("---")
+                st.markdown("### 🔍 오류 상세 정보")
+                
+                if response is None:
+                    st.error("**API 서버 연결 실패**")
+                    st.write("""
+                    **가능한 원인:**
+                    1. API 서버가 실행되지 않음 (포트 8000)
+                    2. 네트워크 연결 문제
+                    3. 서버 타임아웃
+                    
+                    **해결 방법:**
+                    1. `02_start_app.bat` 실행하여 API 서버 시작
+                    2. 브라우저에서 `http://localhost:8000/health` 접속 확인
+                    3. 서버 로그 확인
+                    """)
+                elif isinstance(response, dict):
+                    if "error" in response:
+                        st.error(f"**API 오류:** {response['error']}")
+                    elif "detail" in response:
+                        st.error(f"**서버 오류:** {response['detail']}")
+                    else:
+                        st.error(f"**예상치 못한 응답:** {response}")
+                else:
+                    st.error(f"**응답 형식 오류:** {type(response)}")
+                    st.write(f"**응답 내용:** {response}")
+                
+                # 디버깅 정보
+                st.markdown("### 🛠️ 디버깅 정보")
+                st.write(f"**API URL:** {API_BASE_URL}/query")
+                st.write(f"**요청 시간:** {elapsed_time:.2f}초")
+                st.write(f"**API 타임아웃:** {API_TIMEOUT}초")
+                
+                # 로그 파일 확인 안내
+                st.markdown("### 📋 로그 확인")
+                st.info("""
+                **서버 로그 확인 방법:**
+                1. `logs/app.log` 파일 확인
+                2. `logs/streamlit_app.log` 파일 확인
+                3. 터미널에서 API 서버 로그 확인
+                """)
         else:
             st.warning("⚠️ 질문을 입력해주세요.")
     

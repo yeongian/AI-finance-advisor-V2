@@ -17,6 +17,10 @@ from .investment_agent import PortfolioAnalysisTool, InvestmentRecommendationToo
 from .tax_agent import TaxDeductionAnalysisTool, InvestmentTaxAnalysisTool, BusinessTaxAnalysisTool
 from .retirement_agent import RetirementGoalCalculatorTool, PensionProductAnalysisTool, RetirementRoadmapTool
 from ..rag.knowledge_base import KnowledgeBase
+from ..core.api_config import (
+    AOAI_ENDPOINT, AOAI_API_KEY, AOAI_DEPLOY_GPT4O_MINI, 
+    AOAI_API_VERSION, validate_api_config, get_endpoint_url
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,27 +44,23 @@ class MultiAgentSystem:
             # LLM 초기화
             llm_start_time = time.time()
             logger.info("[BRAIN] LLM 초기화 중...")
-            # Azure OpenAI 설정 수정
-            aoai_endpoint = os.getenv("AOAI_ENDPOINT")
-            aoai_api_key = os.getenv("AOAI_API_KEY")
-            deployment_name = os.getenv("AOAI_DEPLOY_GPT4O_MINI")
             
-            if not aoai_endpoint or not aoai_api_key or not deployment_name:
-                logger.error("[ERROR] Azure OpenAI 설정이 완료되지 않았습니다.")
-                logger.error(f"Endpoint: {aoai_endpoint}")
-                logger.error(f"API Key: {'설정됨' if aoai_api_key else '설정되지 않음'}")
-                logger.error(f"Deployment: {deployment_name}")
+            # 강의자료 방식의 API 설정 검증
+            try:
+                validate_api_config()
+                logger.info("[OK] API 설정 검증 완료")
+            except ValueError as e:
+                logger.error(f"[ERROR] API 설정 검증 실패: {e}")
                 return False
             
             # 엔드포인트 URL 정규화
-            if not aoai_endpoint.endswith('/'):
-                aoai_endpoint += '/'
+            endpoint_url = get_endpoint_url()
             
             self.llm = AzureChatOpenAI(
-                azure_endpoint=aoai_endpoint,
-                azure_deployment=deployment_name,
-                openai_api_key=aoai_api_key,
-                openai_api_version="2024-02-15-preview",
+                azure_endpoint=endpoint_url,
+                azure_deployment=AOAI_DEPLOY_GPT4O_MINI,
+                openai_api_key=AOAI_API_KEY,
+                openai_api_version=AOAI_API_VERSION,
                 temperature=0.7
             )
             llm_elapsed = time.time() - llm_start_time
