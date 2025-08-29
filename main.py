@@ -41,12 +41,12 @@ st.set_page_config(
 
 # API 설정
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
-API_TIMEOUT = int(os.getenv("API_TIMEOUT", "10"))  # 타임아웃 단축
+API_TIMEOUT = int(os.getenv("API_TIMEOUT", "30"))  # 타임아웃 증가 (지식베이스 초기화 시간 고려)
 CACHE_TTL = int(os.getenv("CACHE_TTL", "300"))
 
 # API 연결 재시도 설정 (최적화)
-API_RETRY_COUNT = 1  # 재시도 횟수 단축
-API_RETRY_DELAY = 0.5  # 재시도 간격 단축
+API_RETRY_COUNT = 2  # 재시도 횟수 증가
+API_RETRY_DELAY = 1.0  # 재시도 간격 증가
 
 # 통합 API 호출 함수 (재시도 로직 포함)
 def make_api_request(method: str, endpoint: str, data: dict = None, timeout: int = None) -> dict:
@@ -229,14 +229,29 @@ def render_ai_consultation_tab():
                 "✅ 완료!"
             ]
             
-            for i, step in enumerate(steps):
-                progress = (i + 1) / len(steps)
-                progress_bar.progress(progress)
-                status_text.text(step)
-                time.sleep(0.5)  # 각 단계별로 0.5초 대기
+            # 첫 번째 단계 표시
+            progress_bar.progress(0.2)
+            status_text.text(steps[0])
             
-            # API 호출
+            # API 호출 (실제 처리)
             response = call_api("/query", {"query": user_query, "user_data": None})
+            
+            # API 호출 완료 후 나머지 단계 표시
+            if response:
+                progress_bar.progress(0.6)
+                status_text.text(steps[2])
+                time.sleep(0.3)
+                
+                progress_bar.progress(0.8)
+                status_text.text(steps[3])
+                time.sleep(0.2)
+                
+                progress_bar.progress(1.0)
+                status_text.text(steps[4])
+            else:
+                # API 호출 실패 시
+                progress_bar.progress(1.0)
+                status_text.text("❌ 처리 실패")
             
             elapsed_time = time.time() - start_time
             

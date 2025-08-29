@@ -268,6 +268,11 @@ async def process_query(
                     detail="지식베이스 초기화 실패"
                 )
         
+        # 멀티 에이전트 시스템에 지식베이스 전달
+        if agent_system.knowledge_base is None:
+            logger.info("멀티 에이전트 시스템에 지식베이스 연결 중...")
+            agent_system.knowledge_base = kb
+        
         user_data = request.user_data.dict() if request.user_data else {}
         response = agent_system.process_query(request.query, user_data)
         
