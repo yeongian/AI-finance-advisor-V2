@@ -41,12 +41,12 @@ st.set_page_config(
 
 # API 설정
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
-API_TIMEOUT = int(os.getenv("API_TIMEOUT", "30"))  # 타임아웃 증가 (지식베이스 초기화 시간 고려)
+API_TIMEOUT = int(os.getenv("API_TIMEOUT", "15"))  # 타임아웃 단축 (성능 개선)
 CACHE_TTL = int(os.getenv("CACHE_TTL", "300"))
 
 # API 연결 재시도 설정 (최적화)
-API_RETRY_COUNT = 2  # 재시도 횟수 증가
-API_RETRY_DELAY = 1.0  # 재시도 간격 증가
+API_RETRY_COUNT = 1  # 재시도 횟수 감소 (빠른 실패)
+API_RETRY_DELAY = 0.5  # 재시도 간격 단축
 
 # 통합 API 호출 함수 (재시도 로직 포함)
 def make_api_request(method: str, endpoint: str, data: dict = None, timeout: int = None) -> dict:

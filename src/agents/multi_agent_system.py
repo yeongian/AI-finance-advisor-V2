@@ -202,7 +202,7 @@ class MultiAgentSystem:
 
     
     def process_query(self, query: str, user_data: Dict[str, Any] = None) -> Dict[str, Any]:
-        """사용자 쿼리 처리"""
+        """사용자 쿼리 처리 (성능 최적화)"""
         try:
             if not self.is_initialized:
                 logger.warning("[WARNING] Multi Agent 시스템이 초기화되지 않았습니다.")
@@ -213,22 +213,28 @@ class MultiAgentSystem:
                 logger.error("[ERROR] 에이전트가 초기화되지 않았습니다.")
                 return {"error": "에이전트가 초기화되지 않았습니다."}
             
-            # RAG를 통한 관련 컨텍스트 검색
-            context = self.knowledge_base.get_relevant_context(query) if self.knowledge_base else ""
+            # 빠른 응답을 위한 간단한 모드 (긴 질문이 아닌 경우)
+            if len(query) < 50 and not any(word in query.lower() for word in ["종합", "전체", "모든", "상세"]):
+                return self._fast_response(query, user_data)
+            
+            # RAG를 통한 관련 컨텍스트 검색 (간단한 질문은 스킵)
+            context = ""
+            if len(query) > 30:
+                context = self.knowledge_base.get_relevant_context(query) if self.knowledge_base else ""
             
             # 쿼리 분석하여 적절한 에이전트 선택
             agent_type = self._classify_query(query)
             
             if agent_type in self.agents:
-                # 특정 에이전트로 처리
+                # 특정 에이전트로 처리 (빠른 모드)
                 try:
                     # 에이전트 정보 가져오기
                     agent_info = self.agents[agent_type]
                     
-                    # 프롬프트 구성
-                    system_prompt = agent_info["prompt"]
-                    combined_input = f"컨텍스트: {context}\n\n사용자 질문: {query}"
-                    if user_data:
+                    # 간단한 프롬프트 구성
+                    system_prompt = f"{agent_info['prompt']}\n\n답변은 3-4문장으로 간결하게 제공하세요."
+                    combined_input = f"질문: {query}"
+                    if user_data and len(str(user_data)) < 200:
                         user_info = f"\n사용자 정보: {user_data}"
                         combined_input += user_info
                     
@@ -246,46 +252,100 @@ class MultiAgentSystem:
                     logger.error(f"[ERROR] {agent_type} 에이전트 처리 실패: {e}")
                     return {"error": f"{agent_type} 에이전트 처리 중 오류가 발생했습니다."}
             else:
-                # 종합 분석을 위해 모든 에이전트 실행
-                try:
-                    all_results = {}
-                    
-                    # 모든 에이전트 실행
-                    for agent_name, agent_info in self.agents.items():
-                        try:
-                            # 프롬프트 구성
-                            system_prompt = agent_info["prompt"]
-                            combined_input = f"컨텍스트: {context}\n\n사용자 질문: {query}"
-                            if user_data:
-                                user_info = f"\n사용자 정보: {user_data}"
-                                combined_input += user_info
-                            
-                            # LLM 직접 호출
-                            full_prompt = f"{system_prompt}\n\n{combined_input}"
-                            result = agent_info["llm"].invoke(full_prompt)
-                            
-                            all_results[agent_name] = result.content
-                        except Exception as e:
-                            logger.error(f"{agent_name} 에이전트 실행 실패: {e}")
-                            all_results[agent_name] = f"{agent_name} 분석 중 오류가 발생했습니다."
-                    
-                    # 결과 종합
-                    final_answer = self._synthesize_results(all_results, query)
-                    
-                    return {
-                        "answer": final_answer,
-                        "agent_type": "comprehensive",
-                        "confidence": 0.8,
-                        "context_used": bool(context),
-                        "agent_results": all_results
-                    }
-                except Exception as e:
-                    logger.error(f"[ERROR] 종합 분석 처리 실패: {e}")
-                    return {"error": "종합 분석 처리 중 오류가 발생했습니다."}
+                # 간단한 종합 응답 (모든 에이전트 실행하지 않음)
+                return self._simple_comprehensive_response(query, user_data, context)
             
         except Exception as e:
             logger.error(f"[ERROR] 쿼리 처리 실패: {e}")
             return {"error": f"처리 중 오류가 발생했습니다: {str(e)}"}
+    
+    def _fast_response(self, query: str, user_data: Dict[str, Any] = None) -> Dict[str, Any]:
+        """빠른 응답 (간단한 질문용)"""
+        try:
+            # 간단한 프롬프트로 빠른 응답
+            fast_prompt = f"""당신은 재무관리 전문가입니다. 
+사용자의 질문에 대해 2-3문장으로 간결하고 실용적인 답변을 제공하세요.
+
+질문: {query}"""
+
+            if user_data and len(str(user_data)) < 100:
+                fast_prompt += f"\n\n사용자 정보: {user_data}"
+
+            result = self.llm.invoke(fast_prompt)
+            
+            return {
+                "answer": result.content,
+                "agent_type": "fast",
+                "confidence": 0.7,
+                "context_used": False
+            }
+        except Exception as e:
+            logger.error(f"[ERROR] 빠른 응답 실패: {e}")
+            return {"error": "빠른 응답 처리 중 오류가 발생했습니다."}
+    
+    def _simple_comprehensive_response(self, query: str, user_data: Dict[str, Any] = None, context: str = "") -> Dict[str, Any]:
+        """간단한 종합 응답 (모든 에이전트 실행하지 않음)"""
+        try:
+            # 가장 관련성 높은 에이전트 1-2개만 선택
+            relevant_agents = self._get_relevant_agents(query, max_agents=2)
+            
+            if not relevant_agents:
+                return self._fast_response(query, user_data)
+            
+            # 선택된 에이전트들만 실행
+            results = {}
+            for agent_name in relevant_agents:
+                try:
+                    agent_info = self.agents[agent_name]
+                    system_prompt = f"{agent_info['prompt']}\n\n답변은 2-3문장으로 간결하게 제공하세요."
+                    combined_input = f"질문: {query}"
+                    
+                    if user_data and len(str(user_data)) < 200:
+                        combined_input += f"\n사용자 정보: {user_data}"
+                    
+                    full_prompt = f"{system_prompt}\n\n{combined_input}"
+                    result = agent_info["llm"].invoke(full_prompt)
+                    results[agent_name] = result.content
+                    
+                except Exception as e:
+                    logger.error(f"{agent_name} 에이전트 실행 실패: {e}")
+                    continue
+            
+            # 간단한 결과 종합
+            if results:
+                combined_answer = " ".join(results.values())
+                return {
+                    "answer": combined_answer,
+                    "agent_type": "simple_comprehensive",
+                    "confidence": 0.8,
+                    "context_used": bool(context),
+                    "agent_results": results
+                }
+            else:
+                return self._fast_response(query, user_data)
+                
+        except Exception as e:
+            logger.error(f"[ERROR] 간단한 종합 응답 실패: {e}")
+            return {"error": "종합 응답 처리 중 오류가 발생했습니다."}
+    
+    def _get_relevant_agents(self, query: str, max_agents: int = 2) -> List[str]:
+        """쿼리와 관련된 에이전트 선택 (최대 2개)"""
+        query_lower = query.lower()
+        agent_scores = {}
+        
+        # 각 에이전트별 관련성 점수 계산
+        if any(word in query_lower for word in ["예산", "지출", "저축", "비상금"]):
+            agent_scores["budget"] = 1.0
+        if any(word in query_lower for word in ["투자", "주식", "포트폴리오", "자산배분"]):
+            agent_scores["investment"] = 1.0
+        if any(word in query_lower for word in ["세금", "공제", "연말정산"]):
+            agent_scores["tax"] = 1.0
+        if any(word in query_lower for word in ["은퇴", "연금", "노후"]):
+            agent_scores["retirement"] = 1.0
+        
+        # 점수가 높은 순으로 정렬하여 최대 2개 선택
+        sorted_agents = sorted(agent_scores.items(), key=lambda x: x[1], reverse=True)
+        return [agent for agent, score in sorted_agents[:max_agents]]
     
     def _classify_query(self, query: str) -> str:
         """쿼리 분류"""
