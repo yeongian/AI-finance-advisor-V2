@@ -21,10 +21,42 @@ from .enhanced_endpoints import router as enhanced_router
 from .advanced_tool_endpoints import router as advanced_tool_router
 from .langgraph_endpoints import router as langgraph_router
 
-# 로깅 설정
+# 로깅 설정 (UTF-8 인코딩으로 설정)
+import sys
+import os
+
+# 로그 디렉토리 생성
+os.makedirs('logs', exist_ok=True)
+
+# 콘솔 출력용 핸들러 (이모지 제거)
+class ConsoleHandler(logging.StreamHandler):
+    def emit(self, record):
+        try:
+            # 이모지 제거
+            msg = self.format(record)
+            msg = msg.replace('🚀', '[START]').replace('⚡', '[FAST]').replace('📚', '[KB]')
+            msg = msg.replace('🌐', '[API]').replace('✅', '[OK]').replace('🎯', '[TARGET]')
+            msg = msg.replace('🔄', '[LOAD]').replace('🤖', '[AI]').replace('🎉', '[SUCCESS]')
+            msg = msg.replace('💡', '[TIP]').replace('⚠️', '[WARN]').replace('❌', '[ERROR]')
+            msg = msg.replace('💰', '[MONEY]').replace('📈', '[INVEST]').replace('🧾', '[TAX]')
+            msg = msg.replace('🏠', '[REALESTATE]').replace('💳', '[CARD]').replace('📊', '[ANALYSIS]')
+            msg = msg.replace('💬', '[CHAT]').replace('📋', '[INFO]').replace('🔧', '[FIX]')
+            msg = msg.replace('🔍', '[CHECK]').replace('📝', '[SAMPLE]').replace('💭', '[QUESTION]')
+            msg = msg.replace('🗑️', '[CLEAR]').replace('🤖', '[AI]').replace('📚', '[KB]')
+            
+            stream = self.stream
+            stream.write(msg + self.terminator)
+            self.flush()
+        except Exception:
+            self.handleError(record)
+
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        ConsoleHandler(sys.stdout),
+        logging.FileHandler('logs/app.log', encoding='utf-8')
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -55,18 +87,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 향상된 기능 라우터 추가
-app.include_router(enhanced_router)
-
-# 고급 Tool Calling 기능 라우터 추가
-app.include_router(advanced_tool_router)
-
-# LangGraph 기능 라우터 추가
-app.include_router(langgraph_router)
+# 향상된 기능 라우터 추가 (지연 로딩)
+# app.include_router(enhanced_router)
+# app.include_router(advanced_tool_router)
+# app.include_router(langgraph_router)
 
 # 전역 변수
 knowledge_base = None
 multi_agent_system = None
+routers_loaded = False
+
+# 지연 라우터 로딩 함수
+def load_routers():
+    """라우터를 지연 로딩으로 로드"""
+    global routers_loaded
+    if not routers_loaded:
+        try:
+            logger.info("[LOAD] 라우터 지연 로딩 시작...")
+            app.include_router(enhanced_router)
+            app.include_router(advanced_tool_router)
+            app.include_router(langgraph_router)
+            routers_loaded = True
+            logger.info("[OK] 라우터 지연 로딩 완료")
+        except Exception as e:
+            logger.error(f"[ERROR] 라우터 로딩 실패: {e}")
 
 # Pydantic 모델들
 class UserData(BaseModel):
@@ -155,7 +199,7 @@ async def get_multi_agent_system():
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="멀티 에이전트 시스템 초기화 실패"
                 )
-            logger.info("🤖 멀티 에이전트 시스템 지연 로딩 완료")
+            logger.info("[AI] 멀티 에이전트 시스템 지연 로딩 완료")
         except ImportError as e:
             logger.error(f"멀티 에이전트 시스템 모듈 임포트 실패: {e}")
             raise HTTPException(
@@ -168,6 +212,9 @@ async def get_multi_agent_system():
 @app.get("/")
 async def root():
     """루트 엔드포인트"""
+    # 첫 요청 시 라우터 로딩
+    load_routers()
+    
     return {
         "message": "AI 재무관리 어드바이저 API (RAG + Multi Agent)",
         "version": "2.0.0",
@@ -189,15 +236,21 @@ async def health_check():
     }
 
 @app.post("/query", response_model=Dict[str, Any])
+@app.get("/query")
 async def process_query(
-    request: QueryRequest,
+    request: QueryRequest = None,
+    q: str = None,
     agent_system: MultiAgentSystem = Depends(get_multi_agent_system)
 ):
+    # GET 요청 처리
+    if request is None and q:
+        request = QueryRequest(query=q, user_data=None)
+    
     """
     사용자 쿼리 처리 (RAG + Multi Agent)
     
     Args:
-        request: 쿼리 요청
+        request: 쿼리 요청 (POST) 또는 q: 쿼리 문자열 (GET)
         agent_system: 멀티 에이전트 시스템
         
     Returns:
@@ -209,7 +262,9 @@ async def process_query(
         
         return {
             "query": request.query,
-            "response": response,
+            "answer": response,
+            "agent_type": "comprehensive",
+            "context_used": True,
             "timestamp": datetime.now().isoformat()
         }
         
@@ -397,22 +452,25 @@ async def global_exception_handler(request, exc):
 async def startup_event():
     """애플리케이션 시작 시 실행 (최적화된 버전)"""
     total_start_time = time.time()
-    logger.info("🚀 AI 재무관리 어드바이저 API 서버 시작 중...")
+    logger.info("[START] AI 재무관리 어드바이저 API 서버 시작 중...")
     
     # 기본 서버만 시작하고, 무거운 컴포넌트는 지연 로딩으로 처리
-    logger.info("⚡ 빠른 시작을 위해 지연 로딩 모드로 실행됩니다.")
-    logger.info("📚 지식베이스와 멀티 에이전트는 첫 요청 시 로드됩니다.")
+    logger.info("[FAST] 빠른 시작을 위해 지연 로딩 모드로 실행됩니다.")
+    logger.info("[KB] 지식베이스, 멀티 에이전트, 라우터는 첫 요청 시 로드됩니다.")
+    logger.info("[API] 회사 Azure OpenAI 서비스 연결은 첫 요청 시 수행됩니다.")
     
     # 전체 시작 시간 로깅
     total_elapsed = time.time() - total_start_time
-    logger.info(f"✅ 서버 시작 완료! 총 소요시간: {total_elapsed:.2f}초")
-    logger.info("🎯 이제 API 요청을 받을 준비가 되었습니다!")
+    logger.info(f"[OK] 서버 시작 완료! 총 소요시간: {total_elapsed:.2f}초")
+    logger.info("[TARGET] 이제 API 요청을 받을 준비가 되었습니다!")
+    logger.info("[TIP] 첫 API 요청 시 Azure OpenAI 연결 및 컴포넌트들이 로드됩니다.")
+    logger.info("[TIME] 첫 요청은 10-30초 정도 소요될 수 있습니다.")
 
 # 종료 이벤트
 @app.on_event("shutdown")
 async def shutdown_event():
     """애플리케이션 종료 시 실행"""
-    logger.info("AI 재무관리 어드바이저 API 서버가 종료되었습니다.")
+    logger.info("[END] AI 재무관리 어드바이저 API 서버가 종료되었습니다.")
 
 # 직접 실행 시
 if __name__ == "__main__":

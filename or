@@ -1,0 +1,5 @@
+[33m7d521c6[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m 🔧 프로젝트 정리 및 최적화
+[33m6241e1f[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Update AI Finance Advisor project - complete project files
+[33mb35ac95[m 보안 강화: .gitignore 보안 강화
+[33m4a0568d[m 보안 강화: env_example.txt 개선
+[33mcda63cf[m  프로젝트 구조 개선 및 main.py 통합

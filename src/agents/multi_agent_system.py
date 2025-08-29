@@ -9,15 +9,8 @@ import time
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
-from langchain.schema import HumanMessage, AIMessage
-from langchain.memory import ConversationBufferMemory
 from langchain_community.chat_models import AzureChatOpenAI
-from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import create_react_agent
 from langchain.tools import BaseTool
-from langchain.agents import AgentExecutor, create_openai_functions_agent
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langgraph.func import entrypoint
 
 from .budget_agent import BudgetAnalysisTool, ExpenseCategorizationTool, SavingsPlanTool
 from .investment_agent import PortfolioAnalysisTool, InvestmentRecommendationTool, MarketAnalysisTool
@@ -27,16 +20,7 @@ from ..rag.knowledge_base import KnowledgeBase
 
 logger = logging.getLogger(__name__)
 
-# AgentState 클래스 정의 (MultiAgentSystem보다 먼저 정의)
-class AgentState:
-    """에이전트 상태 클래스"""
-    
-    def __init__(self, query: str = "", user_data: Dict[str, Any] = None, 
-                 context: str = "", results: Dict[str, Any] = None):
-        self.query = query
-        self.user_data = user_data or {}
-        self.context = context
-        self.results = results or {}
+
 
 class MultiAgentSystem:
     """재무관리 Multi Agent 시스템"""
@@ -45,60 +29,66 @@ class MultiAgentSystem:
         self.llm = None
         self.knowledge_base = None
         self.agents = {}  # 명시적 초기화
-        self.memories = {}
-        self.agent_executors = {}
-        self.workflow = None
         self.is_initialized = False
         
     def initialize(self, knowledge_base: KnowledgeBase = None) -> bool:
         """Multi Agent 시스템 초기화"""
         total_start_time = time.time()
         try:
-            logger.info("🤖 Multi Agent 시스템 초기화 시작...")
+            logger.info("[AI] Multi Agent 시스템 초기화 시작...")
             
             # LLM 초기화
             llm_start_time = time.time()
-            logger.info("🧠 LLM 초기화 중...")
+            logger.info("[BRAIN] LLM 초기화 중...")
+            # Azure OpenAI 설정 수정
+            aoai_endpoint = os.getenv("AOAI_ENDPOINT")
+            aoai_api_key = os.getenv("AOAI_API_KEY")
+            deployment_name = os.getenv("AOAI_DEPLOY_GPT4O_MINI")
+            
+            if not aoai_endpoint or not aoai_api_key or not deployment_name:
+                logger.error("[ERROR] Azure OpenAI 설정이 완료되지 않았습니다.")
+                logger.error(f"Endpoint: {aoai_endpoint}")
+                logger.error(f"API Key: {'설정됨' if aoai_api_key else '설정되지 않음'}")
+                logger.error(f"Deployment: {deployment_name}")
+                return False
+            
+            # 엔드포인트 URL 정규화
+            if not aoai_endpoint.endswith('/'):
+                aoai_endpoint += '/'
+            
             self.llm = AzureChatOpenAI(
-                openai_api_key=os.getenv("AOAI_API_KEY"),
-                openai_api_base=os.getenv("AOAI_ENDPOINT"),
+                azure_endpoint=aoai_endpoint,
+                azure_deployment=deployment_name,
+                openai_api_key=aoai_api_key,
                 openai_api_version="2024-02-15-preview",
-                deployment_name=os.getenv("AOAI_DEPLOY_GPT4O_MINI"),
                 temperature=0.7
             )
             llm_elapsed = time.time() - llm_start_time
-            logger.info(f"✅ LLM 초기화 완료: {llm_elapsed:.2f}초")
+            logger.info(f"[OK] LLM 초기화 완료: {llm_elapsed:.2f}초")
             
             # 지식베이스 설정
             self.knowledge_base = knowledge_base
             
             # 에이전트 초기화
             agent_start_time = time.time()
-            logger.info("👥 에이전트 초기화 중...")
+            logger.info("[AGENTS] 에이전트 초기화 중...")
             success = self._initialize_agents()
             if not success:
-                logger.error("❌ 에이전트 초기화 실패")
+                logger.error("[ERROR] 에이전트 초기화 실패")
                 return False
             agent_elapsed = time.time() - agent_start_time
-            logger.info(f"✅ 에이전트 초기화 완료: {agent_elapsed:.2f}초")
+            logger.info(f"[OK] 에이전트 초기화 완료: {agent_elapsed:.2f}초")
             
-            # 워크플로우 생성
-            workflow_start_time = time.time()
-            logger.info("🔄 워크플로우 생성 중...")
-            success = self._create_workflow()
-            if not success:
-                logger.error("❌ 워크플로우 생성 실패")
-                return False
-            workflow_elapsed = time.time() - workflow_start_time
-            logger.info(f"✅ 워크플로우 생성 완료: {workflow_elapsed:.2f}초")
+            # 워크플로우는 더 이상 사용하지 않음
+            logger.info("[SKIP] 워크플로우 생성 건너뜀 (단순화된 구조 사용)")
             
             self.is_initialized = True
             total_elapsed = time.time() - total_start_time
-            logger.info(f"🎉 Multi Agent 시스템 초기화 완료! 총 소요시간: {total_elapsed:.2f}초")
+            logger.info(f"[SUCCESS] Multi Agent 시스템 초기화 완료! 총 소요시간: {total_elapsed:.2f}초")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Multi Agent 시스템 초기화 실패: {e}")
+            logger.error(f"[ERROR] Multi Agent 시스템 초기화 실패: {e}")
             return False
     
     def _initialize_agents(self) -> bool:
@@ -106,7 +96,7 @@ class MultiAgentSystem:
         try:
             # 예산 관리 에이전트
             budget_start_time = time.time()
-            logger.info("💰 예산 관리 에이전트 초기화 중...")
+            logger.info("[BUDGET] 예산 관리 에이전트 초기화 중...")
             budget_tools = [
                 BudgetAnalysisTool(),
                 ExpenseCategorizationTool(),
@@ -114,15 +104,15 @@ class MultiAgentSystem:
             ]
             budget_agent = self._create_agent("budget", budget_tools)
             if budget_agent is None:
-                logger.error("❌ 예산 관리 에이전트 생성 실패")
+                logger.error("[ERROR] 예산 관리 에이전트 생성 실패")
                 return False
             self.agents["budget"] = budget_agent
             budget_elapsed = time.time() - budget_start_time
-            logger.info(f"✅ 예산 관리 에이전트 완료: {budget_elapsed:.2f}초")
+            logger.info(f"[OK] 예산 관리 에이전트 완료: {budget_elapsed:.2f}초")
             
             # 투자 관리 에이전트
             investment_start_time = time.time()
-            logger.info("📈 투자 관리 에이전트 초기화 중...")
+            logger.info("[INVESTMENT] 투자 관리 에이전트 초기화 중...")
             investment_tools = [
                 PortfolioAnalysisTool(),
                 InvestmentRecommendationTool(),
@@ -130,15 +120,15 @@ class MultiAgentSystem:
             ]
             investment_agent = self._create_agent("investment", investment_tools)
             if investment_agent is None:
-                logger.error("❌ 투자 관리 에이전트 생성 실패")
+                logger.error("[ERROR] 투자 관리 에이전트 생성 실패")
                 return False
             self.agents["investment"] = investment_agent
             investment_elapsed = time.time() - investment_start_time
-            logger.info(f"✅ 투자 관리 에이전트 완료: {investment_elapsed:.2f}초")
+            logger.info(f"[OK] 투자 관리 에이전트 완료: {investment_elapsed:.2f}초")
             
             # 세금 관리 에이전트
             tax_start_time = time.time()
-            logger.info("🧾 세금 관리 에이전트 초기화 중...")
+            logger.info("[TAX] 세금 관리 에이전트 초기화 중...")
             tax_tools = [
                 TaxDeductionAnalysisTool(),
                 InvestmentTaxAnalysisTool(),
@@ -146,15 +136,15 @@ class MultiAgentSystem:
             ]
             tax_agent = self._create_agent("tax", tax_tools)
             if tax_agent is None:
-                logger.error("❌ 세금 관리 에이전트 생성 실패")
+                logger.error("[ERROR] 세금 관리 에이전트 생성 실패")
                 return False
             self.agents["tax"] = tax_agent
             tax_elapsed = time.time() - tax_start_time
-            logger.info(f"✅ 세금 관리 에이전트 완료: {tax_elapsed:.2f}초")
+            logger.info(f"[OK] 세금 관리 에이전트 완료: {tax_elapsed:.2f}초")
             
             # 은퇴 관리 에이전트
             retirement_start_time = time.time()
-            logger.info("👴 은퇴 관리 에이전트 초기화 중...")
+            logger.info("[RETIREMENT] 은퇴 관리 에이전트 초기화 중...")
             retirement_tools = [
                 RetirementGoalCalculatorTool(),
                 PensionProductAnalysisTool(),
@@ -162,130 +152,65 @@ class MultiAgentSystem:
             ]
             retirement_agent = self._create_agent("retirement", retirement_tools)
             if retirement_agent is None:
-                logger.error("❌ 은퇴 관리 에이전트 생성 실패")
+                logger.error("[ERROR] 은퇴 관리 에이전트 생성 실패")
                 return False
             self.agents["retirement"] = retirement_agent
             retirement_elapsed = time.time() - retirement_start_time
-            logger.info(f"✅ 은퇴 관리 에이전트 완료: {retirement_elapsed:.2f}초")
+            logger.info(f"[OK] 은퇴 관리 에이전트 완료: {retirement_elapsed:.2f}초")
             
-            logger.info(f"✅ {len(self.agents)}개의 전문 에이전트 초기화 완료")
+            logger.info(f"[SUCCESS] {len(self.agents)}개의 전문 에이전트 초기화 완료")
             return True
             
         except Exception as e:
-            logger.error(f"❌ 에이전트 초기화 실패: {e}")
+            logger.error(f"[ERROR] 에이전트 초기화 실패: {e}")
             return False
     
-    def _create_agent(self, agent_type: str, tools: List[BaseTool]) -> AgentExecutor:
-        """개별 에이전트 생성"""
+    def _create_agent(self, agent_type: str, tools: List[BaseTool]) -> dict:
+        """개별 에이전트 생성 (간단한 딕셔너리 형태)"""
         try:
             # 에이전트별 프롬프트 템플릿
             prompts = {
                 "budget": """당신은 재무관리 전문가 중 예산 관리 전문가입니다.
 사용자의 수입, 지출, 저축 상황을 분석하여 예산 관리 조언을 제공하세요.
-항상 50/30/20 법칙과 비상금 준비 원칙을 고려하여 답변하세요.
-
-{chat_history}
-Human: {input}
-{agent_scratchpad}""",
+항상 50/30/20 법칙과 비상금 준비 원칙을 고려하여 답변하세요.""",
                 
                 "investment": """당신은 재무관리 전문가 중 투자 관리 전문가입니다.
 사용자의 나이, 위험 성향, 투자 목표를 고려하여 포트폴리오 구성과 투자 전략을 제시하세요.
-항상 분산 투자와 나이 기반 자산 배분 원칙을 고려하여 답변하세요.
-
-{chat_history}
-Human: {input}
-{agent_scratchpad}""",
+항상 분산 투자와 나이 기반 자산 배분 원칙을 고려하여 답변하세요.""",
                 
                 "tax": """당신은 재무관리 전문가 중 세금 관리 전문가입니다.
 사용자의 소득, 지출, 투자 상황을 분석하여 세금 절약 방안을 제시하세요.
-소득공제, 보험료공제, 의료비공제 등 다양한 공제 항목을 고려하여 답변하세요.
-
-{chat_history}
-Human: {input}
-{agent_scratchpad}""",
+소득공제, 보험료공제, 의료비공제 등 다양한 공제 항목을 고려하여 답변하세요.""",
                 
                 "retirement": """당신은 재무관리 전문가 중 은퇴 계획 전문가입니다.
 사용자의 나이, 현재 저축액, 은퇴 목표를 고려하여 은퇴 준비 전략을 제시하세요.
-연금저축, IRP, 연금보험 등 다양한 은퇴 준비 방법을 고려하여 답변하세요.
-
-{chat_history}
-Human: {input}
-{agent_scratchpad}"""
+연금저축, IRP, 연금보험 등 다양한 은퇴 준비 방법을 고려하여 답변하세요."""
             }
             
-            prompt = ChatPromptTemplate.from_messages([
-                ("system", prompts.get(agent_type, "당신은 재무관리 전문가입니다.")),
-                MessagesPlaceholder(variable_name="chat_history"),
-                ("human", "{input}"),
-                MessagesPlaceholder(variable_name="agent_scratchpad")
-            ])
-            
-            # 에이전트 생성
-            agent = create_openai_functions_agent(self.llm, tools, prompt)
-            
-            # 메모리 설정
-            memory = ConversationBufferMemory(
-                memory_key="chat_history",
-                return_messages=True
-            )
-            
-            # 에이전트 실행기 생성
-            agent_executor = AgentExecutor(
-                agent=agent,
-                tools=tools,
-                memory=memory,
-                verbose=True,
-                handle_parsing_errors=True
-            )
-            
-            return agent_executor
+            # 간단한 에이전트 딕셔너리 반환
+            return {
+                "llm": self.llm,
+                "prompt": prompts.get(agent_type, "당신은 재무관리 전문가입니다."),
+                "tools": tools,
+                "type": agent_type
+            }
             
         except Exception as e:
             logger.error(f"{agent_type} 에이전트 생성 실패: {e}")
             return None
     
-    def _create_workflow(self) -> bool:
-        """에이전트 워크플로우 생성"""
-        try:
-            # 상태 그래프 생성
-            workflow = StateGraph(AgentState)
-            
-            # 노드 추가
-            workflow.add_node("budget_agent", self._run_budget_agent)
-            workflow.add_node("investment_agent", self._run_investment_agent)
-            workflow.add_node("tax_agent", self._run_tax_agent)
-            workflow.add_node("retirement_agent", self._run_retirement_agent)
-            workflow.add_node("coordinator", self._coordinate_agents)
-            
-            # 엣지 설정
-            workflow.add_edge("budget_agent", "coordinator")
-            workflow.add_edge("investment_agent", "coordinator")
-            workflow.add_edge("tax_agent", "coordinator")
-            workflow.add_edge("retirement_agent", "coordinator")
-            workflow.add_edge("coordinator", END)
-            
-            # 시작 노드 설정
-            workflow.set_entry_point("coordinator")
-            
-            self.workflow = workflow.compile()
-            logger.info("✅ 에이전트 워크플로우 생성 완료")
-            return True
-            
-        except Exception as e:
-            logger.error(f"❌ 워크플로우 생성 실패: {e}")
-            return False
-            return False
+
     
     def process_query(self, query: str, user_data: Dict[str, Any] = None) -> Dict[str, Any]:
         """사용자 쿼리 처리"""
         try:
             if not self.is_initialized:
-                logger.warning("⚠️ Multi Agent 시스템이 초기화되지 않았습니다.")
+                logger.warning("[WARNING] Multi Agent 시스템이 초기화되지 않았습니다.")
                 return {"error": "시스템이 초기화되지 않았습니다."}
             
             # self.agents 초기화 확인
             if not self.agents:
-                logger.error("❌ 에이전트가 초기화되지 않았습니다.")
+                logger.error("[ERROR] 에이전트가 초기화되지 않았습니다.")
                 return {"error": "에이전트가 초기화되지 않았습니다."}
             
             # RAG를 통한 관련 컨텍스트 검색
@@ -297,49 +222,69 @@ Human: {input}
             if agent_type in self.agents:
                 # 특정 에이전트로 처리
                 try:
-                    result = self.agents[agent_type].invoke({
-                        "input": f"컨텍스트: {context}\n\n사용자 질문: {query}",
-                        "user_data": user_data or {}
-                    })
+                    # 에이전트 정보 가져오기
+                    agent_info = self.agents[agent_type]
+                    
+                    # 프롬프트 구성
+                    system_prompt = agent_info["prompt"]
+                    combined_input = f"컨텍스트: {context}\n\n사용자 질문: {query}"
+                    if user_data:
+                        user_info = f"\n사용자 정보: {user_data}"
+                        combined_input += user_info
+                    
+                    # LLM 직접 호출
+                    full_prompt = f"{system_prompt}\n\n{combined_input}"
+                    result = agent_info["llm"].invoke(full_prompt)
                     
                     return {
-                        "answer": result.get("output", ""),
+                        "answer": result.content,
                         "agent_type": agent_type,
                         "confidence": 0.9,
                         "context_used": bool(context)
                     }
                 except Exception as e:
-                    logger.error(f"❌ {agent_type} 에이전트 처리 실패: {e}")
+                    logger.error(f"[ERROR] {agent_type} 에이전트 처리 실패: {e}")
                     return {"error": f"{agent_type} 에이전트 처리 중 오류가 발생했습니다."}
             else:
-                # 워크플로우를 통한 종합 처리
-                if self.workflow is None:
-                    logger.error("❌ 워크플로우가 초기화되지 않았습니다.")
-                    return {"error": "워크플로우가 초기화되지 않았습니다."}
-                
+                # 종합 분석을 위해 모든 에이전트 실행
                 try:
-                    state = AgentState(
-                        query=query,
-                        user_data=user_data or {},
-                        context=context,
-                        results={}
-                    )
+                    all_results = {}
                     
-                    final_state = self.workflow.invoke(state)
+                    # 모든 에이전트 실행
+                    for agent_name, agent_info in self.agents.items():
+                        try:
+                            # 프롬프트 구성
+                            system_prompt = agent_info["prompt"]
+                            combined_input = f"컨텍스트: {context}\n\n사용자 질문: {query}"
+                            if user_data:
+                                user_info = f"\n사용자 정보: {user_data}"
+                                combined_input += user_info
+                            
+                            # LLM 직접 호출
+                            full_prompt = f"{system_prompt}\n\n{combined_input}"
+                            result = agent_info["llm"].invoke(full_prompt)
+                            
+                            all_results[agent_name] = result.content
+                        except Exception as e:
+                            logger.error(f"{agent_name} 에이전트 실행 실패: {e}")
+                            all_results[agent_name] = f"{agent_name} 분석 중 오류가 발생했습니다."
+                    
+                    # 결과 종합
+                    final_answer = self._synthesize_results(all_results, query)
                     
                     return {
-                        "answer": final_state.results.get("final_answer", ""),
+                        "answer": final_answer,
                         "agent_type": "comprehensive",
                         "confidence": 0.8,
                         "context_used": bool(context),
-                        "agent_results": final_state.results
+                        "agent_results": all_results
                     }
                 except Exception as e:
-                    logger.error(f"❌ 워크플로우 처리 실패: {e}")
-                    return {"error": "워크플로우 처리 중 오류가 발생했습니다."}
+                    logger.error(f"[ERROR] 종합 분석 처리 실패: {e}")
+                    return {"error": "종합 분석 처리 중 오류가 발생했습니다."}
             
         except Exception as e:
-            logger.error(f"❌ 쿼리 처리 실패: {e}")
+            logger.error(f"[ERROR] 쿼리 처리 실패: {e}")
             return {"error": f"처리 중 오류가 발생했습니다: {str(e)}"}
     
     def _classify_query(self, query: str) -> str:
@@ -357,73 +302,7 @@ Human: {input}
         else:
             return "comprehensive"
     
-    def _run_budget_agent(self, state: AgentState) -> AgentState:
-        """예산 에이전트 실행"""
-        try:
-            result = self.agents["budget"].invoke({
-                "input": state.query,
-                "user_data": state.user_data
-            })
-            state.results["budget"] = result.get("output", "")
-            return state
-        except Exception as e:
-            logger.error(f"예산 에이전트 실행 실패: {e}")
-            state.results["budget"] = "예산 분석 중 오류가 발생했습니다."
-            return state
-    
-    def _run_investment_agent(self, state: AgentState) -> AgentState:
-        """투자 에이전트 실행"""
-        try:
-            result = self.agents["investment"].invoke({
-                "input": state.query,
-                "user_data": state.user_data
-            })
-            state.results["investment"] = result.get("output", "")
-            return state
-        except Exception as e:
-            logger.error(f"투자 에이전트 실행 실패: {e}")
-            state.results["investment"] = "투자 분석 중 오류가 발생했습니다."
-            return state
-    
-    def _run_tax_agent(self, state: AgentState) -> AgentState:
-        """세금 에이전트 실행"""
-        try:
-            result = self.agents["tax"].invoke({
-                "input": state.query,
-                "user_data": state.user_data
-            })
-            state.results["tax"] = result.get("output", "")
-            return state
-        except Exception as e:
-            logger.error(f"세금 에이전트 실행 실패: {e}")
-            state.results["tax"] = "세금 분석 중 오류가 발생했습니다."
-            return state
-    
-    def _run_retirement_agent(self, state: AgentState) -> AgentState:
-        """은퇴 에이전트 실행"""
-        try:
-            result = self.agents["retirement"].invoke({
-                "input": state.query,
-                "user_data": state.user_data
-            })
-            state.results["retirement"] = result.get("output", "")
-            return state
-        except Exception as e:
-            logger.error(f"은퇴 에이전트 실행 실패: {e}")
-            state.results["retirement"] = "은퇴 분석 중 오류가 발생했습니다."
-            return state
-            
-    def _coordinate_agents(self, state: AgentState) -> AgentState:
-        """에이전트 조율"""
-        try:
-            # 모든 에이전트 결과를 종합
-            final_answer = self._synthesize_results(state.results, state.query)
-            state.results["final_answer"] = final_answer
-            return state
-        except Exception as e:
-            logger.error(f"에이전트 조율 실패: {e}")
-            state.results["final_answer"] = "종합 분석 중 오류가 발생했습니다."
-            return state
+
     
     def _synthesize_results(self, results: Dict[str, str], query: str) -> str:
         """결과 종합"""
@@ -458,9 +337,14 @@ Human: {input}
             # 각 에이전트별 분석 수행
             for agent_type, agent in self.agents.items():
                 analysis_query = self._get_analysis_query(agent_type, user_data)
+                # 메모리 호환성을 위해 단일 입력으로 결합
+                combined_input = analysis_query
+                if user_data:
+                    user_info = f"\n사용자 정보: {user_data}"
+                    combined_input += user_info
+                
                 result = agent.invoke({
-                    "input": analysis_query,
-                    "user_data": user_data
+                    "input": combined_input
                 })
                 analysis_results[agent_type] = result.get("output", "")
             
@@ -522,52 +406,26 @@ Human: {input}
             "is_initialized": self.is_initialized,
             "agent_count": len(self.agents),
             "agents": list(self.agents.keys()),
-            "workflow_exists": self.workflow is not None,
+            "workflow_exists": False,  # 워크플로우는 더 이상 사용하지 않음
             "agent_status": {
                 agent_name: {
                     "initialized": agent is not None,
-                    "has_memory": hasattr(agent, 'memory') if agent else False
+                    "type": "simplified"  # 단순화된 에이전트 구조
                 }
                 for agent_name, agent in self.agents.items()
             }
         }
     
-    @entrypoint()
-    def multi_agent_workflow(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """LangGraph entrypoint를 활용한 멀티 에이전트 워크플로우"""
-        try:
-            if not self.is_initialized:
-                return {"error": "시스템이 초기화되지 않았습니다."}
-            
-            if not messages:
-                return {"error": "메시지가 없습니다."}
-            
-            # 마지막 메시지에서 쿼리 추출
-            last_message = messages[-1]
-            query = last_message.get("content", "")
-            user_data = last_message.get("user_data", {})
-            
-            # 기존 process_query 메서드 활용
-            return self.process_query(query, user_data)
-            
-        except Exception as e:
-            logger.error(f"❌ 멀티 에이전트 워크플로우 실행 실패: {e}")
-            return {"error": f"워크플로우 실행 중 오류가 발생했습니다: {str(e)}"}
+
     
     def clear_all_memories(self):
-        """모든 에이전트의 메모리 초기화"""
+        """모든 에이전트의 메모리 초기화 (단순화된 구조)"""
         try:
             if not self.agents:
-                logger.warning("⚠️ 초기화할 에이전트가 없습니다.")
+                logger.warning("[WARNING] 초기화할 에이전트가 없습니다.")
                 return
             
-            cleared_count = 0
-            for agent_name, agent in self.agents.items():
-                if hasattr(agent, 'memory') and agent.memory is not None:
-                    agent.memory.clear()
-                    cleared_count += 1
-                    logger.info(f"✅ {agent_name} 에이전트 메모리 초기화 완료")
-            
-            logger.info(f"✅ 총 {cleared_count}개 에이전트의 메모리가 초기화되었습니다.")
+            logger.info("[INFO] 단순화된 에이전트 구조에서는 메모리가 자동으로 관리됩니다.")
+            logger.info(f"[INFO] 총 {len(self.agents)}개 에이전트가 준비되었습니다.")
         except Exception as e:
-            logger.error(f"❌ 메모리 초기화 실패: {e}")
+            logger.error(f"[ERROR] 메모리 초기화 실패: {e}")

@@ -32,6 +32,8 @@ if 'current_thread_id' not in st.session_state:
     st.session_state.current_thread_id = f"user_{uuid.uuid4().hex[:8]}"
 if 'expert_consultations' not in st.session_state:
     st.session_state.expert_consultations = {}
+if 'is_loading' not in st.session_state:
+    st.session_state.is_loading = False
 
 def call_langgraph_api(endpoint, data=None):
     """LangGraph API 호출"""
@@ -74,7 +76,7 @@ def main():
             st.session_state.langgraph_chat_history = []
         
         # 새 스레드 생성
-        if st.button("🆕 새 스레드 생성"):
+        if st.button("🆕 새 스레드 생성", disabled=st.session_state.is_loading):
             st.session_state.current_thread_id = f"user_{uuid.uuid4().hex[:8]}"
             st.session_state.langgraph_chat_history = []
             st.rerun()
@@ -82,7 +84,7 @@ def main():
         st.markdown("---")
         
         # LangGraph 상태 확인
-        if st.button("🔍 LangGraph 상태 확인"):
+        if st.button("🔍 LangGraph 상태 확인", disabled=st.session_state.is_loading):
             status = call_langgraph_api("/status")
             if status:
                 if status.get("langgraph_available", False):
@@ -105,7 +107,7 @@ def main():
                     st.write(f"**{thread['thread_id']}**")
                     st.caption(f"메시지: {thread['message_count']}개")
                 with col2:
-                    if st.button("🗑️", key=f"del_{thread['thread_id']}"):
+                    if st.button("🗑️", key=f"del_{thread['thread_id']}", disabled=st.session_state.is_loading):
                         call_langgraph_api(f"/threads/{thread['thread_id']}", method="DELETE")
                         st.rerun()
     
@@ -141,7 +143,7 @@ def main():
         # 기본 챗봇 인터페이스
         basic_message = st.text_input("메시지를 입력하세요:", key="basic_chat_input")
         
-        if st.button("💬 기본 챗봇 실행", type="primary") or st.session_state.get('basic_chat_message'):
+        if st.button("💬 기본 챗봇 실행", type="primary", disabled=st.session_state.is_loading) or st.session_state.get('basic_chat_message'):
             if basic_message or st.session_state.get('basic_chat_message'):
                 message = basic_message or st.session_state.get('basic_chat_message')
                 
@@ -186,7 +188,7 @@ def main():
         # Tool Agent 인터페이스
         tool_query = st.text_input("질의를 입력하세요:", key="tool_agent_input")
         
-        if st.button("🛠️ Tool Agent 실행", type="primary") or st.session_state.get('tool_agent_query'):
+        if st.button("🛠️ Tool Agent 실행", type="primary", disabled=st.session_state.is_loading) or st.session_state.get('tool_agent_query'):
             if tool_query or st.session_state.get('tool_agent_query'):
                 query = tool_query or st.session_state.get('tool_agent_query')
                 
@@ -230,7 +232,7 @@ def main():
         # Multi Agent 인터페이스
         multi_query = st.text_input("복잡한 질의를 입력하세요:", key="multi_agent_input")
         
-        if st.button("🤖 Multi Agent 실행", type="primary") or st.session_state.get('multi_agent_query'):
+        if st.button("🤖 Multi Agent 실행", type="primary", disabled=st.session_state.is_loading) or st.session_state.get('multi_agent_query'):
             if multi_query or st.session_state.get('multi_agent_query'):
                 query = multi_query or st.session_state.get('multi_agent_query')
                 
@@ -263,7 +265,7 @@ def main():
         
         analysis_user_id = st.text_input("분석할 사용자 ID:", value="12345")
         
-        if st.button("📊 종합 분석 실행", type="primary"):
+        if st.button("📊 종합 분석 실행", type="primary", disabled=st.session_state.is_loading):
             with st.spinner("종합 재무 분석을 수행하고 있습니다..."):
                 response = call_langgraph_api("/comprehensive-analysis", {
                     "user_id": analysis_user_id,
@@ -326,7 +328,7 @@ def main():
                 st.rerun()
         
         # 대화 초기화
-        if st.button("🗑️ 대화 초기화"):
+        if st.button("🗑️ 대화 초기화", disabled=st.session_state.is_loading):
             st.session_state.langgraph_chat_history = []
             st.rerun()
     
@@ -355,7 +357,7 @@ def main():
         # 전문가별 질의 입력
         expert_query = st.text_area("전문가에게 할 질의를 입력하세요:")
         
-        if st.button("👨‍💼 전문가 상담 실행", type="primary"):
+        if st.button("👨‍💼 전문가 상담 실행", type="primary", disabled=st.session_state.is_loading):
             if expert_query:
                 with st.spinner("전문가 상담 중..."):
                     response = call_langgraph_api("/expert-consultation", {

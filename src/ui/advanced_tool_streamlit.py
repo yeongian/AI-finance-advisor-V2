@@ -29,6 +29,8 @@ if 'advanced_tool_chat_history' not in st.session_state:
     st.session_state.advanced_tool_chat_history = []
 if 'user_data' not in st.session_state:
     st.session_state.user_data = {}
+if 'is_loading' not in st.session_state:
+    st.session_state.is_loading = False
 
 def call_advanced_tool_api(endpoint, data=None):
     """고급 Tool Calling API 호출"""
@@ -89,7 +91,7 @@ def main():
         st.markdown("---")
         
         # 고급 Tool Calling 기능 상태 확인
-        if st.button("🔍 고급 Tool Calling 상태 확인"):
+        if st.button("🔍 고급 Tool Calling 상태 확인", disabled=st.session_state.is_loading):
             status = call_advanced_tool_api("/status")
             if status:
                 st.success("✅ 고급 Tool Calling 기능 정상 작동")
@@ -129,7 +131,7 @@ def main():
         # 기본 Tool Calling 인터페이스
         basic_query = st.text_input("질문을 입력하세요:", key="basic_tool_input")
         
-        if st.button("🔧 기본 Tool Calling 실행", type="primary") or st.session_state.get('basic_tool_query'):
+        if st.button("🔧 기본 Tool Calling 실행", type="primary", disabled=st.session_state.is_loading) or st.session_state.get('basic_tool_query'):
             if basic_query or st.session_state.get('basic_tool_query'):
                 query = basic_query or st.session_state.get('basic_tool_query')
                 
@@ -179,7 +181,7 @@ def main():
         # Agent Executor 인터페이스
         agent_query = st.text_input("질문을 입력하세요:", key="agent_exec_input")
         
-        if st.button("🤖 Agent Executor 실행", type="primary") or st.session_state.get('agent_exec_query'):
+        if st.button("🤖 Agent Executor 실행", type="primary", disabled=st.session_state.is_loading) or st.session_state.get('agent_exec_query'):
             if agent_query or st.session_state.get('agent_exec_query'):
                 query = agent_query or st.session_state.get('agent_exec_query')
                 
@@ -215,7 +217,7 @@ def main():
         
         analysis_user_id = st.text_input("분석할 사용자 ID:", value="12345")
         
-        if st.button("📊 종합 재무 분석 실행", type="primary"):
+        if st.button("📊 종합 재무 분석 실행", type="primary", disabled=st.session_state.is_loading):
             with st.spinner("종합 재무 분석을 수행하고 있습니다..."):
                 response = call_advanced_tool_api("/comprehensive-analysis", {
                     "user_id": analysis_user_id
@@ -342,7 +344,7 @@ def main():
                 st.rerun()
         
         # 대화 초기화
-        if st.button("🗑️ 대화 초기화"):
+        if st.button("🗑️ 대화 초기화", disabled=st.session_state.is_loading):
             st.session_state.advanced_tool_chat_history = []
             st.rerun()
     
@@ -407,7 +409,7 @@ def main():
             )
             parameters = {"symbols": symbols}
         
-        if st.button("🧪 도구 테스트 실행", type="primary"):
+        if st.button("🧪 도구 테스트 실행", type="primary", disabled=st.session_state.is_loading):
             with st.spinner("도구 테스트 중..."):
                 response = call_advanced_tool_api("/tool-test", {
                     "tool_name": tool_name,

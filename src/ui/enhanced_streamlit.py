@@ -29,6 +29,8 @@ if 'enhanced_chat_history' not in st.session_state:
     st.session_state.enhanced_chat_history = []
 if 'user_data' not in st.session_state:
     st.session_state.user_data = {}
+if 'is_loading' not in st.session_state:
+    st.session_state.is_loading = False
 
 def call_enhanced_api(endpoint, data=None):
     """향상된 API 호출"""
@@ -87,7 +89,7 @@ def main():
         st.markdown("---")
         
         # 향상된 기능 상태 확인
-        if st.button("🔍 향상된 기능 상태 확인"):
+        if st.button("🔍 향상된 기능 상태 확인", disabled=st.session_state.is_loading):
             status = call_enhanced_api("/status")
             if status:
                 st.success("✅ 향상된 기능 정상 작동")
@@ -125,7 +127,7 @@ def main():
         # LCEL 채팅 인터페이스
         lcel_query = st.text_input("질문을 입력하세요:", key="lcel_input")
         
-        if st.button("🚀 LCEL 체인으로 분석", type="primary") or st.session_state.get('lcel_query'):
+        if st.button("🚀 LCEL 체인으로 분석", type="primary", disabled=st.session_state.is_loading) or st.session_state.get('lcel_query'):
             if lcel_query or st.session_state.get('lcel_query'):
                 query = lcel_query or st.session_state.get('lcel_query')
                 
@@ -172,7 +174,7 @@ def main():
             }[x]
         )
         
-        if st.button("🔍 구조화된 분석 실행", type="primary"):
+        if st.button("🔍 구조화된 분석 실행", type="primary", disabled=st.session_state.is_loading):
             with st.spinner("구조화된 분석을 수행하고 있습니다..."):
                 response = call_enhanced_api("/structured-analysis", {
                     "analysis_type": analysis_type,
@@ -259,7 +261,7 @@ def main():
             height=100
         )
         
-        if st.button("🔍 JSON 파서로 분석", type="primary"):
+        if st.button("🔍 JSON 파서로 분석", type="primary", disabled=st.session_state.is_loading):
             if json_query:
                 with st.spinner("JSON 파서로 분석 중..."):
                     response = call_enhanced_api("/json-parser", {
@@ -323,7 +325,7 @@ def main():
                 st.rerun()
         
         # 대화 초기화
-        if st.button("🗑️ 대화 초기화"):
+        if st.button("🗑️ 대화 초기화", disabled=st.session_state.is_loading):
             st.session_state.enhanced_chat_history = []
             st.rerun()
     
@@ -343,7 +345,7 @@ def main():
             placeholder="https://example.com/image.jpg"
         )
         
-        if st.button("🔍 멀티모달 분석", type="primary"):
+        if st.button("🔍 멀티모달 분석", type="primary", disabled=st.session_state.is_loading):
             if multimodal_text:
                 with st.spinner("멀티모달 분석 중..."):
                     response = call_enhanced_api("/multimodal-analysis", {

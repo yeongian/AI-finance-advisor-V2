@@ -27,6 +27,8 @@ if 'user_data' not in st.session_state:
     st.session_state.user_data = {}
 if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
+if 'is_loading' not in st.session_state:
+    st.session_state.is_loading = False
 
 def check_api_health():
     """API 서버 상태 확인"""
@@ -358,7 +360,8 @@ def main():
     with tab3:
         st.header("💰 예산 관리")
         
-        if st.button("📊 예산 분석", type="primary"):
+        if st.button("📊 예산 분석", type="primary", disabled=st.session_state.is_loading):
+            st.session_state.is_loading = True
             with st.spinner("예산 분석을 수행하고 있습니다..."):
                 budget_data = call_api("/analyze/budget", {
                     "analysis_type": "budget",
@@ -402,12 +405,15 @@ def main():
                                     st.write(f"• {rec}")
                 else:
                     st.error("예산 분석 데이터를 받을 수 없습니다.")
+            
+            st.session_state.is_loading = False
     
     # 탭 4: 투자 관리
     with tab4:
         st.header("📈 투자 관리")
         
-        if st.button("📊 포트폴리오 분석", type="primary"):
+        if st.button("📊 포트폴리오 분석", type="primary", disabled=st.session_state.is_loading):
+            st.session_state.is_loading = True
             with st.spinner("투자 분석을 수행하고 있습니다..."):
                 investment_data = call_api("/analyze/investment", {
                     "analysis_type": "investment",
@@ -443,12 +449,15 @@ def main():
                                 st.write(f"• {rec}")
                 else:
                     st.error("투자 분석 데이터를 받을 수 없습니다.")
+            
+            st.session_state.is_loading = False
     
     # 탭 5: 세금 관리
     with tab5:
         st.header("📋 세금 관리")
         
-        if st.button("📊 세금 분석", type="primary"):
+        if st.button("📊 세금 분석", type="primary", disabled=st.session_state.is_loading):
+            st.session_state.is_loading = True
             with st.spinner("세금 분석을 수행하고 있습니다..."):
                 tax_data = call_api("/analyze/tax", {
                     "analysis_type": "tax",
@@ -482,6 +491,8 @@ def main():
                                 st.write(f"• {rec}")
                 else:
                     st.error("세금 분석 데이터를 받을 수 없습니다.")
+            
+            st.session_state.is_loading = False
 
 if __name__ == "__main__":
     main()
