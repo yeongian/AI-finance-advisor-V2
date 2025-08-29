@@ -5,6 +5,7 @@ AI 재무관리 어드바이저의 REST API 서버 (RAG + Multi Agent 통합)
 
 import logging
 import time
+import asyncio
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
@@ -96,6 +97,7 @@ app.add_middleware(
 knowledge_base = None
 multi_agent_system = None
 routers_loaded = False
+is_initializing = False  # 초기화 중복 방지
 
 # 지연 라우터 로딩 함수
 def load_routers():
@@ -163,25 +165,49 @@ class ComprehensiveAnalysisRequest(BaseModel):
 # 의존성 함수들
 async def get_knowledge_base():
     """지식베이스 의존성 (지연 로딩)"""
-    global knowledge_base
-    if knowledge_base is None or not knowledge_base.is_initialized:
-        try:
-            from ..rag.knowledge_base import KnowledgeBase
-            logger.info("📚 지식베이스 지연 로딩 시작...")
-            knowledge_base = KnowledgeBase()
-            success = knowledge_base.initialize()
-            if not success:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="지식베이스 초기화 실패"
-                )
-            logger.info("📚 지식베이스 지연 로딩 완료")
-        except ImportError as e:
-            logger.error(f"지식베이스 모듈 임포트 실패: {e}")
+    global knowledge_base, is_initializing
+    
+    # 이미 초기화된 경우 바로 반환
+    if knowledge_base is not None and knowledge_base.is_initialized:
+        return knowledge_base
+    
+    # 초기화 중인 경우 대기
+    if is_initializing:
+        logger.info("📚 지식베이스 초기화 중... 대기")
+        while is_initializing:
+            await asyncio.sleep(0.1)
+        return knowledge_base
+    
+    # 초기화 시작
+    is_initializing = True
+    try:
+        from ..rag.knowledge_base import KnowledgeBase
+        logger.info("📚 지식베이스 지연 로딩 시작...")
+        knowledge_base = KnowledgeBase()
+        success = knowledge_base.initialize()
+        if not success:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="지식베이스 모듈을 찾을 수 없습니다"
+                detail="지식베이스 초기화 실패"
             )
+        logger.info("📚 지식베이스 지연 로딩 완료")
+    except ImportError as e:
+        is_initializing = False
+        logger.error(f"지식베이스 모듈 임포트 실패: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="지식베이스 모듈을 찾을 수 없습니다"
+        )
+    except Exception as e:
+        is_initializing = False
+        logger.error(f"지식베이스 초기화 실패: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"지식베이스 초기화 실패: {str(e)}"
+        )
+    finally:
+        is_initializing = False
+    
     return knowledge_base
 
 async def get_multi_agent_system():
@@ -257,16 +283,8 @@ async def process_query(
         AI 응답
     """
     try:
-        # 지식베이스 상태 확인 및 재초기화
+        # 지식베이스 가져오기 (이미 초기화된 경우 빠르게 반환)
         kb = await get_knowledge_base()
-        if not kb.is_initialized:
-            logger.warning("지식베이스가 초기화되지 않았습니다. 재초기화를 시도합니다.")
-            success = kb.initialize()
-            if not success:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="지식베이스 초기화 실패"
-                )
         
         # 멀티 에이전트 시스템에 지식베이스 전달
         if agent_system.knowledge_base is None:
