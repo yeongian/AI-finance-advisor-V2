@@ -1,0 +1,142 @@
+# ================================================
+# AI 재무관리 어드바이저 환경 변수 설정 파일
+# ================================================
+# 
+# 사용 방법:
+# 1. 이 파일을 .env로 복사: cp env_example.txt .env
+# 2. .env 파일에서 실제 값들을 설정
+# 3. .env 파일은 절대 Git에 커밋하지 마세요!
+#
+# 보안 주의사항:
+# - API 키는 절대 공개 저장소에 업로드하지 마세요
+# - .env 파일을 .gitignore에 추가하세요
+# - 프로덕션에서는 환경 변수를 안전하게 관리하세요
+
+# ================================================
+# Azure OpenAI API 설정 (주요 설정)
+# ================================================
+# Azure OpenAI 서비스 엔드포인트 URL
+AOAI_ENDPOINT=https://skcc-atl-dev-openai-01.openai.azure.com/
+
+# Azure OpenAI API 키 (보안 필수!)
+AOAI_API_KEY=5kWBVPecvaqFeiB3PJYXnfkMHclg66duBhVXY5lWE9z187WonAnAJQQJ99BBACYeBjFXJ3w3AAABACOGqwfl
+
+# 사용할 모델 배포명들
+AOAI_DEPLOY_GPT4O_MINI=gpt-4o-mini
+AOAI_DEPLOY_GPT4O=gpt-4o
+AOAI_DEPLOY_EMBED_3_LARGE=text-embedding-3-large
+AOAI_DEPLOY_EMBED_3_SMALL=text-embedding-3-small
+AOAI_DEPLOY_EMBED_ADA=text-embedding-ada-002
+
+# ================================================
+# 모델 설정
+# ================================================
+# 기본 사용 모델 (Azure OpenAI)
+OPENAI_MODEL=gpt-4o-mini
+
+# 임베딩 모델 (벡터 검색용)
+EMBEDDING_MODEL=text-embedding-3-small
+
+# ================================================
+# 외부 API 설정 (선택사항)
+# ================================================
+# Alpha Vantage API (주식 데이터)
+ALPHA_VANTAGE_API_KEY=your_alpha_vantage_api_key_here
+
+# Yahoo Finance API (금융 데이터)
+YAHOO_FINANCE_API_KEY=your_yahoo_finance_api_key_here
+
+# ================================================
+# 데이터베이스 설정
+# ================================================
+# SQLite 데이터베이스 경로
+DATABASE_URL=sqlite:///./data/finance_advisor.db
+
+# 벡터 데이터베이스 경로들
+VECTOR_DB_PATH=./data/vector_db
+CHROMA_DB_PATH=./data/chroma_db
+
+# ================================================
+# 로깅 설정
+# ================================================
+# 로그 레벨 (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+LOG_LEVEL=INFO
+
+# 로그 파일 경로
+LOG_FILE=./logs/app.log
+
+# LangSmith 트레이싱 (디버깅용)
+LANGSMITH_TRACING=false
+LANGSMITH_API_KEY=your_langsmith_api_key_here
+
+# ================================================
+# 서버 설정
+# ================================================
+# 서버 호스트 (개발: localhost, 프로덕션: 0.0.0.0)
+HOST=localhost
+
+# 서버 포트
+PORT=8000
+
+# 디버그 모드 (개발: True, 프로덕션: False)
+DEBUG=True
+
+# ================================================
+# 보안 설정
+# ================================================
+# JWT 시크릿 키 (보안 필수!)
+SECRET_KEY=your_secret_key_here
+
+# 액세스 토큰 만료 시간 (분)
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# CORS 설정
+ALLOWED_ORIGINS=http://localhost:8501,http://localhost:3000
+
+# ================================================
+# RAG (Retrieval-Augmented Generation) 설정
+# ================================================
+# 문서 청크 크기 (토큰 단위)
+RAG_CHUNK_SIZE=1000
+
+# 청크 간 겹침 (토큰 단위)
+RAG_CHUNK_OVERLAP=200
+
+# 검색 결과 개수
+RAG_TOP_K=5
+
+# ================================================
+# 에이전트 설정
+# ================================================
+# 최대 토큰 수
+MAX_TOKENS=4000
+
+# 생성 온도 (0.0: 결정적, 1.0: 창의적)
+TEMPERATURE=0.7
+
+# 최대 반복 횟수
+MAX_ITERATIONS=10
+
+# 에이전트 메모리 설정
+AGENT_MEMORY_SIZE=10
+
+# ================================================
+# 성능 최적화 설정
+# ================================================
+# 캐시 TTL (초)
+CACHE_TTL=300
+
+# API 타임아웃 (초)
+API_TIMEOUT=30
+
+# 워커 프로세스 수
+WORKER_PROCESSES=1
+
+# ================================================
+# 모니터링 설정
+# ================================================
+# 성능 모니터링 활성화
+ENABLE_MONITORING=true
+
+# 메트릭 수집 간격 (초)
+METRICS_INTERVAL=60
