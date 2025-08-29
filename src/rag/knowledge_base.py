@@ -31,6 +31,11 @@ class KnowledgeBase:
         try:
             logger.info("[KB] 지식베이스 초기화 시작...")
             
+            # 이미 초기화된 경우 스킵
+            if self.is_initialized and self.vector_store is not None:
+                logger.info("[KB] 이미 초기화된 지식베이스 사용")
+                return True
+            
             # OpenAI 임베딩 초기화
             embed_start_time = time.time()
             logger.info("[EMBED] OpenAI 임베딩 초기화 중...")
@@ -62,6 +67,22 @@ class KnowledgeBase:
                 logger.error(f"[TIP] 배포 이름: {deployment}")
                 logger.error(f"[TIP] 엔드포인트: {endpoint}")
                 return False
+            
+            # 기존 벡터 스토어 로드 시도 (빠른 초기화)
+            vector_store_path = Path("data/vector_store")
+            if vector_store_path.exists():
+                try:
+                    load_start_time = time.time()
+                    logger.info("[LOAD] 기존 벡터 스토어 로드 중...")
+                    self.vector_store = FAISS.load_local("data/vector_store", self.embeddings)
+                    load_elapsed = time.time() - load_start_time
+                    logger.info(f"[OK] 기존 벡터 스토어 로드 완료: {load_elapsed:.2f}초")
+                    self.is_initialized = True
+                    total_elapsed = time.time() - total_start_time
+                    logger.info(f"[SUCCESS] 지식베이스 빠른 초기화 완료! 총 소요시간: {total_elapsed:.2f}초")
+                    return True
+                except Exception as e:
+                    logger.warning(f"[WARNING] 기존 벡터 스토어 로드 실패, 새로 생성합니다: {e}")
             
             # 문서 로드
             doc_start_time = time.time()

@@ -164,7 +164,7 @@ class ComprehensiveAnalysisRequest(BaseModel):
 async def get_knowledge_base():
     """지식베이스 의존성 (지연 로딩)"""
     global knowledge_base
-    if knowledge_base is None:
+    if knowledge_base is None or not knowledge_base.is_initialized:
         try:
             from ..rag.knowledge_base import KnowledgeBase
             logger.info("📚 지식베이스 지연 로딩 시작...")
@@ -257,6 +257,17 @@ async def process_query(
         AI 응답
     """
     try:
+        # 지식베이스 상태 확인 및 재초기화
+        kb = await get_knowledge_base()
+        if not kb.is_initialized:
+            logger.warning("지식베이스가 초기화되지 않았습니다. 재초기화를 시도합니다.")
+            success = kb.initialize()
+            if not success:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="지식베이스 초기화 실패"
+                )
+        
         user_data = request.user_data.dict() if request.user_data else {}
         response = agent_system.process_query(request.query, user_data)
         
