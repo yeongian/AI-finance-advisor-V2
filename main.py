@@ -99,11 +99,20 @@ def make_api_request(method: str, endpoint: str, data: dict = None, timeout: int
     return None
 
 # 캐싱 설정 (최적화)
-@st.cache_data(ttl=30)  # 30초 캐시
+@st.cache_data(ttl=5)  # 5초 캐시로 단축 (더 자주 확인)
 def check_api_health():
     """API 서버 상태 확인"""
-    result = make_api_request("GET", "/health", timeout=5)  # 타임아웃 단축
-    return result is not None
+    try:
+        result = make_api_request("GET", "/health", timeout=3)  # 타임아웃 더 단축
+        if result is None:
+            return False
+        # 응답 내용도 확인
+        if isinstance(result, dict) and result.get("status") == "healthy":
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"API 헬스 체크 실패: {e}")
+        return False
 
 @st.cache_data(ttl=10)  # 10초 캐시
 def call_api(endpoint, data=None):
@@ -789,14 +798,10 @@ def main():
     # 헤더 최적화
     st.title("💰 AI 재무관리 어드바이저")
     
-    # API 상태 확인 (단순화)
-    if not st.session_state.api_checked:
-        with st.spinner("API 서버 연결 확인 중..."):
-            api_healthy = check_api_health()
-            st.session_state.api_checked = True
-            st.session_state.api_healthy = api_healthy
-    else:
-        api_healthy = st.session_state.api_healthy
+    # API 상태 확인 (실시간)
+    with st.spinner("API 서버 연결 확인 중..."):
+        api_healthy = check_api_health()
+        st.session_state.api_healthy = api_healthy
     
     if not api_healthy:
         st.error("⚠️ API 서버에 연결할 수 없습니다.")
