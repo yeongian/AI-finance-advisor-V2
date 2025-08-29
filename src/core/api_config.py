@@ -23,7 +23,8 @@ def validate_api_config():
         "AOAI_ENDPOINT",
         "AOAI_API_KEY", 
         "AOAI_DEPLOY_GPT4O_MINI",
-        "AOAI_DEPLOY_EMBED_3_SMALL"
+        "AOAI_DEPLOY_EMBED_3_SMALL",
+        "AOAI_DEPLOY_EMBED_ADA"
     ]
     
     missing_vars = []

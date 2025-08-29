@@ -269,8 +269,18 @@ async def process_query(
     agent_system: MultiAgentSystem = Depends(get_multi_agent_system)
 ):
     # GET 요청 처리
-    if request is None and q:
-        request = QueryRequest(query=q, user_data=None)
+    if request is None:
+        if q:
+            request = QueryRequest(query=q, user_data=None)
+        else:
+            # q 파라미터도 없는 경우 기본 응답
+            return {
+                "query": "",
+                "answer": "AI 재무관리 어드바이저에 오신 것을 환영합니다! 질문을 입력해주세요.",
+                "agent_type": "welcome",
+                "context_used": False,
+                "timestamp": datetime.now().isoformat()
+            }
     
     """
     사용자 쿼리 처리 (RAG + Multi Agent)
@@ -304,6 +314,19 @@ async def process_query(
         
     except Exception as e:
         logger.error(f"쿼리 처리 실패: {e}")
+        
+        # 지식베이스 초기화 실패인 경우 기본 응답 제공
+        if "지식베이스 초기화 실패" in str(e) or "임베딩" in str(e):
+            return {
+                "query": request.query,
+                "answer": "죄송합니다. 현재 지식베이스에 일시적인 문제가 있습니다. 기본 AI 응답을 제공합니다:\n\n" + 
+                         "재무 관리에 대한 일반적인 조언을 드리겠습니다. 구체적인 질문이 있으시면 다시 시도해주세요.",
+                "agent_type": "basic",
+                "context_used": False,
+                "error": "지식베이스 초기화 실패",
+                "timestamp": datetime.now().isoformat()
+            }
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"쿼리 처리 중 오류가 발생했습니다: {str(e)}"

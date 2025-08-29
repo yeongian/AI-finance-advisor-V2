@@ -54,19 +54,33 @@ class KnowledgeBase:
             
             try:
                 endpoint_url = get_endpoint_url()
-                self.embeddings = OpenAIEmbeddings(
-                    openai_api_key=AOAI_API_KEY,
-                    openai_api_base=endpoint_url,
-                    openai_api_version=AOAI_API_VERSION,
-                    deployment=AOAI_DEPLOY_EMBED_3_SMALL
-                )
+                # 먼저 text-embedding-3-small 시도
+                try:
+                    self.embeddings = OpenAIEmbeddings(
+                        openai_api_key=AOAI_API_KEY,
+                        openai_api_base=endpoint_url,
+                        openai_api_version=AOAI_API_VERSION,
+                        deployment=AOAI_DEPLOY_EMBED_3_SMALL
+                    )
+                    logger.info(f"[OK] text-embedding-3-small 모델 사용")
+                except Exception as e:
+                    logger.warning(f"[WARNING] text-embedding-3-small 모델 실패, text-embedding-ada-002 시도: {e}")
+                    # text-embedding-ada-002로 대체
+                    self.embeddings = OpenAIEmbeddings(
+                        openai_api_key=AOAI_API_KEY,
+                        openai_api_base=endpoint_url,
+                        openai_api_version=AOAI_API_VERSION,
+                        deployment=AOAI_DEPLOY_EMBED_ADA
+                    )
+                    logger.info(f"[OK] text-embedding-ada-002 모델 사용")
+                
                 embed_elapsed = time.time() - embed_start_time
                 logger.info(f"[OK] 임베딩 초기화 완료: {embed_elapsed:.2f}초")
             except Exception as embed_error:
-                logger.error(f"[ERROR] 임베딩 모델 초기화 실패: {embed_error}")
+                logger.error(f"[ERROR] 모든 임베딩 모델 초기화 실패: {embed_error}")
                 logger.error("[TIP] Azure OpenAI Studio에서 임베딩 모델이 올바르게 배포되었는지 확인하세요.")
-                logger.error(f"[TIP] 배포 이름: {deployment}")
-                logger.error(f"[TIP] 엔드포인트: {endpoint}")
+                logger.error(f"[TIP] 사용 가능한 모델: {AOAI_DEPLOY_EMBED_3_SMALL}, {AOAI_DEPLOY_EMBED_ADA}")
+                logger.error(f"[TIP] 엔드포인트: {endpoint_url}")
                 return False
             
             # 기존 벡터 스토어 로드 시도 (빠른 초기화)
