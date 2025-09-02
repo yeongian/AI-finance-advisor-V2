@@ -99,10 +99,10 @@ class KnowledgeBase:
                 except Exception as e:
                     logger.warning(f"[WARNING] 기존 벡터 스토어 로드 실패, 새로 생성합니다: {e}")
             
-            # 문서 로드
+            # 문서 로드 (최적화된 방식)
             doc_start_time = time.time()
-            logger.info("[DOC] 문서 로드 중...")
-            self._load_documents()
+            logger.info("[DOC] 최적화된 문서 로드 중...")
+            self._load_minimal_documents()
             doc_elapsed = time.time() - doc_start_time
             logger.info(f"[OK] 문서 로드 완료: {doc_elapsed:.2f}초")
             
@@ -269,3 +269,39 @@ class KnowledgeBase:
             "연금 상품에는 어떤 것들이 있나요?",
             "부채 관리는 어떻게 해야 하나요?"
         ]
+    
+    def _load_minimal_documents(self):
+        """최소한의 문서만 로드하여 초기화 시간 단축"""
+        try:
+            # 기본 재무관리 문서만 로드
+            basic_docs = [
+                Document(
+                    page_content="예산 관리의 기본 원칙: 수입을 파악하고, 지출을 분류하며, 목표를 설정하고, 정기적으로 검토하는 것이 중요합니다.",
+                    metadata={"source": "budget_basics", "category": "budget"}
+                ),
+                Document(
+                    page_content="투자 포트폴리오 구성: 위험 분산을 위해 주식, 채권, 현금을 적절히 배분하고, 정기적으로 리밸런싱하는 것이 좋습니다.",
+                    metadata={"source": "investment_basics", "category": "investment"}
+                ),
+                Document(
+                    page_content="세금 절약 방법: 연말정산, 각종 공제, 세금 혜택을 활용하고, 전문가 상담을 받는 것이 효과적입니다.",
+                    metadata={"source": "tax_basics", "category": "tax"}
+                ),
+                Document(
+                    page_content="은퇴 준비: 30대부터 시작하여 목표 금액을 설정하고, 연금 상품과 개인 연금을 조합하여 준비하는 것이 좋습니다.",
+                    metadata={"source": "retirement_basics", "category": "retirement"}
+                )
+            ]
+            
+            self.documents = basic_docs
+            logger.info(f"[OPTIMIZE] 최소 문서 로딩 완료: {len(self.documents)}개")
+            
+        except Exception as e:
+            logger.error(f"[ERROR] 최소 문서 로딩 실패: {e}")
+            # 기본 문서라도 생성
+            self.documents = [
+                Document(
+                    page_content="재무관리 기본 가이드: 수입과 지출을 파악하고, 목표를 설정하며, 정기적으로 검토하는 것이 중요합니다.",
+                    metadata={"source": "basic_guide", "category": "general"}
+                )
+            ]

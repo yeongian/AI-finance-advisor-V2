@@ -14,6 +14,10 @@ import sys
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+import plotly.graph_objects as go
+import plotly.express as px
+import pandas as pd
+import numpy as np
 
 # 환경 변수 로딩
 load_dotenv()
@@ -122,6 +126,74 @@ def call_api(endpoint, data=None):
     else:
         return make_api_request("GET", endpoint)
 
+# 실시간 데이터 관련 함수들
+def create_market_dashboard():
+    """시장 대시보드 생성"""
+    # 코스피/코스닥/환율 정보 제거 - 간단한 대시보드만 표시
+    st.subheader("📈 AI 재무관리 어드바이저")
+    st.info("💡 AI 기반 개인 재무 관리 및 투자 자문 시스템입니다.")
+
+def create_portfolio_chart(portfolio_data):
+    """포트폴리오 차트 생성"""
+    if not portfolio_data or "error" in portfolio_data:
+        return None
+    
+    try:
+        # 포트폴리오 성과 차트
+        fig = go.Figure()
+        
+        # 수익률 라인 차트
+        if "portfolio_returns" in portfolio_data:
+            returns = portfolio_data["portfolio_returns"]
+            dates = pd.date_range(start=portfolio_data.get("start_date", "2023-01-01"), 
+                                periods=len(returns), freq='D')
+            
+            fig.add_trace(go.Scatter(
+                x=dates,
+                y=returns.cumsum() * 100,  # 누적 수익률을 퍼센트로
+                mode='lines',
+                name='포트폴리오 수익률',
+                line=dict(color='#1f77b4', width=2)
+            ))
+        
+        fig.update_layout(
+            title="포트폴리오 성과 추이",
+            xaxis_title="날짜",
+            yaxis_title="누적 수익률 (%)",
+            height=400,
+            showlegend=True
+        )
+        
+        return fig
+    except Exception as e:
+        logger.error(f"포트폴리오 차트 생성 실패: {e}")
+        return None
+
+def create_expense_pie_chart(expenses_data):
+    """지출 파이 차트 생성"""
+    if not expenses_data:
+        return None
+    
+    try:
+        # 카테고리별 지출 데이터
+        categories = list(expenses_data.keys())
+        amounts = list(expenses_data.values())
+        
+        fig = px.pie(
+            values=amounts,
+            names=categories,
+            title="월별 지출 분포",
+            color_discrete_sequence=px.colors.qualitative.Set3
+        )
+        
+        fig.update_traces(textposition='inside', textinfo='percent+label')
+        fig.update_layout(height=400)
+        
+        return fig
+    except Exception as e:
+        logger.error(f"지출 차트 생성 실패: {e}")
+        return None
+
 def format_currency(amount):
     """통화 포맷팅"""
     return f"₩{amount:,.0f}"
@@ -148,21 +220,12 @@ if 'show_summary' not in st.session_state:
 
 if 'quick_analysis' not in st.session_state:
     st.session_state.quick_analysis = None
+if 'show_question_input' not in st.session_state:
+    st.session_state.show_question_input = False
 
 def render_ai_consultation_tab():
     """AI 상담 탭"""
     st.header("💬 AI 상담")
-    
-    # 기능 차별화 설명
-    st.info("""
-    **🎯 기능별 차이점:**
-    
-    **📝 샘플 질문**: 일반적인 재무 상담 질문으로 간단한 답변을 제공합니다.
-    
-    **💭 직접 질문**: 사용자가 원하는 내용을 자유롭게 질문할 수 있습니다.
-    
-    **💡 팁**: 더 정확한 분석을 위해 종합 분석 탭에서 먼저 개인 정보를 입력하세요!
-    """)
     
     # 샘플 질문 버튼들
     st.subheader("📝 샘플 질문")
@@ -171,53 +234,63 @@ def render_ai_consultation_tab():
     with col1:
         if st.button("💰 예산 관리 방법", use_container_width=True, disabled=st.session_state.is_loading):
             st.session_state.user_query = "월급의 30%를 저축하려고 하는데, 어떤 방법으로 예산을 관리하면 좋을까요?"
-            st.session_state.auto_submit = True
+            st.session_state.ai_consultation_auto_submit = True
         
         if st.button("📈 투자 포트폴리오", use_container_width=True, disabled=st.session_state.is_loading):
             st.session_state.user_query = "초보 투자자로서 안전하면서도 수익을 낼 수 있는 포트폴리오를 추천해주세요."
-            st.session_state.auto_submit = True
+            st.session_state.ai_consultation_auto_submit = True
     
     with col2:
         if st.button("🧾 세금 절약 전략", use_container_width=True, disabled=st.session_state.is_loading):
             st.session_state.user_query = "연말정산에서 세금을 절약할 수 있는 방법들을 알려주세요."
-            st.session_state.auto_submit = True
+            st.session_state.ai_consultation_auto_submit = True
         
         if st.button("🎯 은퇴 계획", use_container_width=True, disabled=st.session_state.is_loading):
             st.session_state.user_query = "30대 후반인데 은퇴를 위해 얼마나 저축해야 하고 어떤 준비를 해야 할까요?"
-            st.session_state.auto_submit = True
+            st.session_state.ai_consultation_auto_submit = True
     
     with col3:
         if st.button("🏠 부동산 투자", use_container_width=True, disabled=st.session_state.is_loading):
             st.session_state.user_query = "부동산 투자를 고려하고 있는데, 현재 시점에서 어떤 지역이나 유형이 좋을까요?"
-            st.session_state.auto_submit = True
+            st.session_state.ai_consultation_auto_submit = True
         
         if st.button("💳 신용카드 관리", use_container_width=True, disabled=st.session_state.is_loading):
             st.session_state.user_query = "신용카드를 효율적으로 사용하면서 신용점수를 관리하는 방법을 알려주세요."
-            st.session_state.auto_submit = True
+            st.session_state.ai_consultation_auto_submit = True
     
-    # 사용자 입력
-    st.subheader("💭 질문하기")
-    user_query = st.text_area(
-        "재무 관련 질문을 입력하세요:",
-        value=st.session_state.user_query,
-        height=100,
-        placeholder="예: 월급의 30%를 저축하려고 하는데, 어떤 방법으로 예산을 관리하면 좋을까요?"
-    )
-    
-    # 질문하기 버튼
-    col1, col2 = st.columns([1, 4])
-    with col1:
-        submit_button = st.button("🤖 AI에게 질문하기", type="primary", disabled=st.session_state.is_loading)
-    
+    # 샘플 질문 아래 간단한 질문하기 버튼
+    st.markdown("---")
+    col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
-        if st.button("🗑️ 입력 초기화", type="secondary", disabled=st.session_state.is_loading):
-            st.session_state.user_query = ""
+        if st.button("💭 질문하기", type="primary", use_container_width=True, disabled=st.session_state.is_loading):
+            st.session_state.show_question_input = True
+    
+    # 사용자 입력 (조건부 표시)
+    submit_button = False
+    user_query = ""
+    
+    if st.session_state.get('show_question_input', False):
+        user_query = st.text_area(
+            "재무 관련 질문을 입력하세요:",
+            value=st.session_state.user_query,
+            height=100,
+            placeholder="예: 월급의 30%를 저축하려고 하는데, 어떤 방법으로 예산을 관리하면 좋을까요?"
+        )
+        
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            submit_button = st.button("🤖 AI에게 질문하기", type="primary", disabled=st.session_state.is_loading)
+        
+        with col2:
+            if st.button("🗑️ 입력 초기화", type="secondary", disabled=st.session_state.is_loading):
+                st.session_state.user_query = ""
+                st.session_state.show_question_input = False
     
     # 질문 처리
-    if submit_button or st.session_state.auto_submit:
+    if submit_button or st.session_state.get('ai_consultation_auto_submit', False):
         if user_query.strip():
             # 자동 제출 상태 초기화
-            st.session_state.auto_submit = False
+            st.session_state.ai_consultation_auto_submit = False
             
             # 로딩 상태 시작
             st.session_state.is_loading = True
@@ -231,10 +304,10 @@ def render_ai_consultation_tab():
             
             # 단계별 진행 상황 표시
             steps = [
-                "🔍 질문 분석 중...",
-                "📚 지식베이스 검색 중...",
-                "🤖 AI 모델 처리 중...",
-                "📝 답변 생성 중...",
+                "🔄 질문 분석 중...",
+                "🔄 지식베이스 검색 중...",
+                "🔄 AI 모델 처리 중...",
+                "🔄 답변 생성 중...",
                 "✅ 완료!"
             ]
             
@@ -532,83 +605,315 @@ def render_ai_consultation_tab():
     else:
         st.info("💡 아직 대화 기록이 없습니다. 질문을 해보세요!")
 
+def render_portfolio_simulation_tab():
+    """포트폴리오 시뮬레이션 탭"""
+    st.header("📈 포트폴리오 시뮬레이션")
+    
+    st.info("💡 다양한 포트폴리오 구성을 시뮬레이션하여 최적의 투자 전략을 찾아보세요.")
+    
+    # 포트폴리오 설정
+    st.subheader("🎯 포트폴리오 설정")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # 종목 선택
+        st.write("**📊 종목 선택**")
+        symbols_input = st.text_area(
+            "종목 코드 (한 줄에 하나씩)",
+            value="005930.KS\n000660.KS\n035420.KS\n051910.KS\n006400.KS",
+            height=100,
+            help="야후 파이낸스 종목 코드를 입력하세요. 예: 005930.KS (삼성전자)"
+        )
+        
+        # 투자 기간
+        st.write("**📅 투자 기간**")
+        start_date = st.date_input("시작일", value=datetime(2023, 1, 1))
+        end_date = st.date_input("종료일", value=datetime.now())
+        
+    with col2:
+        # 투자 금액
+        st.write("**💰 투자 금액**")
+        initial_investment = st.number_input(
+            "초기 투자 금액 (원)",
+            min_value=1000000,
+            value=10000000,
+            step=1000000,
+            format="%d"
+        )
+        
+        # 포트폴리오 수
+        st.write("**📊 시뮬레이션 설정**")
+        num_portfolios = st.slider("포트폴리오 수", min_value=100, max_value=1000, value=500, step=100)
+        
+        # 위험 성향
+        risk_tolerance = st.selectbox(
+            "위험 성향",
+            ["conservative", "moderate", "aggressive"],
+            format_func=lambda x: {"conservative": "보수적", "moderate": "중립적", "aggressive": "공격적"}[x]
+        )
+    
+    # 시뮬레이션 실행
+    if st.button("🚀 포트폴리오 시뮬레이션 실행", type="primary"):
+        if symbols_input.strip():
+            symbols = [s.strip() for s in symbols_input.split('\n') if s.strip()]
+            
+            # 로딩 상태 시작
+            st.session_state.is_loading = True
+            
+            # 프로그레스 바와 로딩 메시지 표시
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            # 단계별 진행 상황 표시
+            steps = [
+                "🔄 포트폴리오 시뮬레이션 시작...",
+                "🔄 주가 데이터 수집 중...",
+                "🔄 효율적 프론티어 계산 중...",
+                "🔄 최적 포트폴리오 분석 중...",
+                "🔄 결과 시각화 중...",
+                "✅ 완료!"
+            ]
+            
+            # 첫 번째 단계 표시
+            progress_bar.progress(0.1)
+            status_text.text(steps[0])
+            
+            # 효율적 프론티어 생성
+            efficient_frontier_data = {
+                "symbols": symbols,
+                "start_date": start_date.strftime('%Y-%m-%d'),
+                "end_date": end_date.strftime('%Y-%m-%d'),
+                "num_portfolios": num_portfolios
+            }
+            
+            # API 호출 (실제 처리)
+            response = call_api("/portfolio/efficient-frontier", efficient_frontier_data)
+            
+            # API 호출 완료 후 나머지 단계 표시
+            if response:
+                progress_bar.progress(0.3)
+                status_text.text(steps[1])
+                time.sleep(0.2)
+                
+                progress_bar.progress(0.5)
+                status_text.text(steps[2])
+                time.sleep(0.2)
+                
+                progress_bar.progress(0.7)
+                status_text.text(steps[3])
+                time.sleep(0.2)
+                
+                progress_bar.progress(0.9)
+                status_text.text(steps[4])
+                time.sleep(0.2)
+                
+                progress_bar.progress(1.0)
+                status_text.text(steps[5])
+            else:
+                # API 호출 실패 시
+                progress_bar.progress(1.0)
+                status_text.text("❌ 시뮬레이션 실패")
+            
+            # 로딩 상태 종료
+            st.session_state.is_loading = False
+            
+            if response and "error" not in response:
+                st.success("✅ 포트폴리오 시뮬레이션이 완료되었습니다!")
+                
+                # 결과 표시
+                st.subheader("📊 시뮬레이션 결과")
+                
+                # 효율적 프론티어 차트
+                if "portfolios" in response:
+                    portfolios = response["portfolios"]
+                    
+                    # 산점도 차트 생성
+                    returns = [p["return"] for p in portfolios]
+                    volatilities = [p["volatility"] for p in portfolios]
+                    
+                    fig = px.scatter(
+                            x=volatilities,
+                            y=returns,
+                            title="효율적 프론티어",
+                            labels={"x": "변동성 (리스크)", "y": "기대 수익률"},
+                            color_discrete_sequence=['blue']
+                        )
+                        
+                    fig.update_layout(
+                        height=500,
+                        showlegend=False
+                    )
+                    
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # 최적 포트폴리오 정보
+                    if "optimal_portfolio" in response:
+                        optimal = response["optimal_portfolio"]
+                        st.subheader("🎯 최적 포트폴리오")
+                        
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("기대 수익률", f"{optimal.get('return', 0):.2f}%")
+                        with col2:
+                            st.metric("변동성", f"{optimal.get('volatility', 0):.2f}%")
+                        with col3:
+                            st.metric("샤프 비율", f"{optimal.get('sharpe_ratio', 0):.2f}")
+                        with col4:
+                            st.metric("최대 낙폭", f"{optimal.get('max_drawdown', 0):.2f}%")
+                        
+                        # 자산 배분
+                        st.write("**📊 자산 배분**")
+                        allocation_data = optimal.get("allocation", {})
+                        if allocation_data:
+                            allocation_df = pd.DataFrame([
+                                {"종목": symbol, "비중": f"{weight:.1f}%"}
+                                for symbol, weight in allocation_data.items()
+                            ])
+                            st.dataframe(allocation_df, use_container_width=True)
+                else:
+                    st.error("❌ 포트폴리오 시뮬레이션에 실패했습니다.")
+                    if response and "detail" in response:
+                        st.error(f"오류 상세: {response['detail']}")
+                    else:
+                        st.error("API 서버에서 응답을 받지 못했습니다.")
+        else:
+            st.warning("⚠️ 종목 코드를 입력해주세요.")
+
+def render_investment_analysis_tab():
+    """투자 분석 탭"""
+    st.header("🎯 투자 분석")
+    
+    st.info("💡 개별 종목 분석과 시장 예측을 통해 투자 결정을 도와드립니다.")
+    
+    # 종목 분석
+    st.subheader("📊 종목 분석")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        symbol = st.text_input(
+            "종목 코드",
+            value="005930.KS",
+            help="야후 파이낸스 종목 코드를 입력하세요. 예: 005930.KS (삼성전자)"
+        )
+        
+        analysis_type = st.selectbox(
+            "분석 유형",
+            ["sentiment", "prediction"],
+            format_func=lambda x: {"sentiment": "감정 분석", "prediction": "시장 예측"}[x]
+        )
+    
+    with col2:
+        if analysis_type == "prediction":
+            days = st.slider("예측 기간 (일)", min_value=7, max_value=90, value=30)
+            confidence_level = st.slider("신뢰도", min_value=0.5, max_value=0.95, value=0.8, step=0.05)
+    
+    # 분석 실행
+    if st.button("🔍 투자 분석 실행", type="primary"):
+        if symbol.strip():
+            # 로딩 상태 시작
+            st.session_state.is_loading = True
+            
+            # 프로그레스 바와 로딩 메시지 표시
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            # 단계별 진행 상황 표시
+            steps = [
+                "🔄 투자 분석 시작...",
+                "🔄 데이터 수집 중...",
+                "🔄 분석 처리 중...",
+                "🔄 결과 생성 중...",
+                "✅ 완료!"
+            ]
+            
+            # 첫 번째 단계 표시
+            progress_bar.progress(0.2)
+            status_text.text(steps[0])
+            
+            if analysis_type == "sentiment":
+                    # 감정 분석
+                    sentiment_data = {
+                        "text_data": [f"분석 대상: {symbol}"]
+                    }
+                    response = call_api("/ai/sentiment-analysis", sentiment_data)
+                    
+                    if response and "error" not in response:
+                        st.success("✅ 감정 분석이 완료되었습니다!")
+                        
+                        # 결과 표시
+                        sentiment_score = response.get("overall_sentiment", 0)
+                        sentiment_label = response.get("sentiment_label", "중립")
+                        
+                        st.subheader("📊 감정 분석 결과")
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric("감정 점수", f"{sentiment_score:.2f}")
+                        with col2:
+                            st.metric("감정 레이블", sentiment_label)
+                        
+                        # 감정 점수 시각화
+                        fig = go.Figure(go.Indicator(
+                            mode="gauge+number+delta",
+                            value=sentiment_score,
+                            domain={'x': [0, 1], 'y': [0, 1]},
+                            title={'text': "시장 감정 지수"},
+                            delta={'reference': 0},
+                            gauge={
+                                'axis': {'range': [-1, 1]},
+                                'bar': {'color': "darkblue"},
+                                'steps': [
+                                    {'range': [-1, -0.3], 'color': "lightgray"},
+                                    {'range': [-0.3, 0.3], 'color': "yellow"},
+                                    {'range': [0.3, 1], 'color': "lightgreen"}
+                                ],
+                                'threshold': {
+                                    'line': {'color': "red", 'width': 4},
+                                    'thickness': 0.75,
+                                    'value': 0.8
+                                }
+                            }
+                        ))
+                        
+                        fig.update_layout(height=400)
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+            else:
+                # 시장 예측
+                response = call_api(f"/ai/market-prediction/{symbol}?days={days}&confidence_level={confidence_level}")
+                
+                if response and "error" not in response:
+                        st.success("✅ 시장 예측이 완료되었습니다!")
+                        
+                        # 결과 표시
+                        st.subheader("🔮 시장 예측 결과")
+                        
+                        prediction = response.get("trend_direction", "상승")
+                        confidence = response.get("confidence_level", 0)
+                        risk_level = response.get("risk_level", "보통")
+                        recommendation = response.get("recommendation", "")
+                        
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("예측 방향", prediction)
+                        with col2:
+                            st.metric("신뢰도", f"{confidence:.1f}%")
+                        with col3:
+                            st.metric("리스크 레벨", risk_level)
+                        
+                        if recommendation:
+                            st.write("**💡 투자 권고사항**")
+                            st.info(recommendation)
+                else:
+                    st.error("❌ 시장 예측에 실패했습니다.")
+        else:
+            st.warning("⚠️ 종목 코드를 입력해주세요.")
+
 def render_comprehensive_analysis_tab():
     """종합 분석 탭"""
     st.header("📊 종합 분석")
-    
-    st.info("💡 이 기능은 사용자의 재무 정보를 종합적으로 분석하여 맞춤형 조언을 제공합니다.")
-    
-    # 빠른 분석 섹션
-    st.subheader("🚀 빠른 분석")
-    st.info("""
-    **🚀 빠른 분석**: 전문 에이전트가 구조화된 상세 분석을 수행합니다.
-    - 예산 분석: 재무 건강도, 지출 패턴 분석, 최적화 방안
-    - 투자 자문: 포트폴리오 구성, 리스크 관리, 수익률 예측
-    - 세금 절약: 공제 항목 분석, 최적화 전략, 절약 효과 계산
-    
-    **💡 차이점**: 상세/요약 분석은 종합적인 재무 진단을, 빠른 분석은 특정 영역에 집중한 전문 분석을 제공합니다.
-    """)
-    
-    # 사용자 데이터 확인
-    user_data = st.session_state.get('user_data', {})
-    has_user_data = bool(user_data and user_data.get('income', 0) > 0)
-    
-    if has_user_data:
-        st.success("✅ 사용자 데이터가 입력되어 있습니다. 실제 데이터로 분석을 수행합니다.")
-        income = user_data.get('income', 0)
-        expenses = user_data.get('expenses', 0)
-        age = user_data.get('age', 30)
-        risk_tolerance = user_data.get('risk_tolerance', 'moderate')
-        
-        # 실제 데이터로 질문 생성
-        budget_query = f"전문적인 예산 분석을 해주세요. 연소득 {income:,}원, 연지출 {expenses:,}원인 상황에서 예산 최적화 방안과 재무 건강도를 평가해주세요."
-        investment_query = f"전문적인 투자 자문을 해주세요. {age}세, {risk_tolerance} 위험성향, 투자 가능 금액 {(income-expenses)//12:,}원으로 포트폴리오 구성과 리스크 관리 방안을 제시해주세요."
-        tax_query = f"전문적인 세금 절약 분석을 해주세요. 연소득 {income:,}원인 상황에서 최적의 세금 절약 전략을 제시해주세요."
-    else:
-        st.warning("⚠️ 예시 데이터로 분석을 수행합니다.")
-        st.info("💡 **정확한 데이터를 원하시면, 아래 기본정보/월별지출을 먼저 입력해 주세요.**")
-        # 기본 예시 데이터
-        budget_query = "전문적인 예산 분석을 해주세요. 월급 500만원, 월 지출 300만원, 저축 목표 200만원인 상황에서 예산 최적화 방안과 재무 건강도를 평가해주세요."
-        investment_query = "전문적인 투자 자문을 해주세요. 초보 투자자, 30대, 위험 성향 중간, 투자 금액 1000만원으로 포트폴리오 구성과 리스크 관리 방안을 제시해주세요."
-        tax_query = "전문적인 세금 절약 분석을 해주세요. 연소득 6000만원, 신용카드 사용액 200만원, 의료비 50만원, 보험료 30만원인 상황에서 최적의 세금 절약 전략을 제시해주세요."
-    
-    quick_col1, quick_col2, quick_col3 = st.columns(3)
-    
-    with quick_col1:
-        if st.button("💰 예산 분석", use_container_width=True, type="primary", disabled=st.session_state.is_loading):
-            st.session_state.user_query = budget_query
-            st.session_state.auto_submit = True
-            st.session_state.analysis_type = "budget"
-    
-    with quick_col2:
-        if st.button("📈 투자 자문", use_container_width=True, type="primary", disabled=st.session_state.is_loading):
-            st.session_state.user_query = investment_query
-            st.session_state.auto_submit = True
-            st.session_state.analysis_type = "investment"
-    
-    with quick_col3:
-        if st.button("🧾 세금 절약", use_container_width=True, type="primary", disabled=st.session_state.is_loading):
-            st.session_state.user_query = tax_query
-            st.session_state.auto_submit = True
-            st.session_state.analysis_type = "tax"
-    
-    st.markdown("---")
-    
-    # 종합 분석 옵션
-    st.subheader("⚡ 종합 분석 옵션")
-    st.info("💡 상세 분석은 포괄적인 재무 진단을, 요약 분석은 핵심 내용만 간단히 제공합니다.")
-    
-    quick_analysis_col1, quick_analysis_col2 = st.columns(2)
-    
-    with quick_analysis_col1:
-        if st.button("📈 상세 분석", use_container_width=True, type="primary", disabled=st.session_state.is_loading):
-            st.session_state.quick_analysis = "detailed"
-    
-    with quick_analysis_col2:
-        if st.button("📋 요약 분석", use_container_width=True, type="secondary", disabled=st.session_state.is_loading):
-            st.session_state.quick_analysis = "summary"
-    
-    st.markdown("---")
     
     with st.form("comprehensive_analysis"):
         st.subheader("📋 기본 정보")
@@ -628,170 +933,143 @@ def render_comprehensive_analysis_tab():
                 format_func=lambda x: {"conservative": "보수적", "moderate": "중립적", "aggressive": "공격적"}[x]
             )
         
-        st.subheader("💰 월별 지출 세부사항")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            housing = st.number_input("주거비 (월)", min_value=0, value=800000, step=10000)
-            food = st.number_input("식비 (월)", min_value=0, value=500000, step=10000)
-        
-        with col2:
-            transportation = st.number_input("교통비 (월)", min_value=0, value=300000, step=10000)
-            utilities = st.number_input("공과금 (월)", min_value=0, value=200000, step=10000)
-        
-        with col3:
-            entertainment = st.number_input("여가비 (월)", min_value=0, value=200000, step=10000)
-            other = st.number_input("기타 (월)", min_value=0, value=100000, step=10000)
-        
-        st.subheader("📈 현재 투자 현황")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            stocks = st.number_input("주식 투자 (원)", min_value=0, value=5000000, step=100000)
-        
-        with col2:
-            bonds = st.number_input("채권 투자 (원)", min_value=0, value=2000000, step=100000)
-        
-        with col3:
-            cash = st.number_input("현금 보유 (원)", min_value=0, value=3000000, step=100000)
-        
-        submitted = st.form_submit_button("📊 종합 분석 실행", type="primary", disabled=st.session_state.is_loading)
-        
-        if submitted:
+        # 종합분석 실행 버튼
+        if st.form_submit_button("🤖 종합분석 실행", type="primary", use_container_width=True):
             # 사용자 데이터 구성
             user_data = {
                 "age": age,
                 "income": income,
                 "expenses": expenses,
                 "savings": savings,
-                "risk_tolerance": risk_tolerance,
-                "monthly_expenses": {
-                    "housing": housing,
-                    "food": food,
-                    "transportation": transportation,
-                    "utilities": utilities,
-                    "entertainment": entertainment,
-                    "other": other
-                },
-                "current_investments": {
-                    "stocks": stocks,
-                    "bonds": bonds,
-                    "cash": cash
-                }
+                "risk_tolerance": risk_tolerance
             }
             
-            # 세션 상태에 사용자 데이터 저장 (빠른 시작에서 사용)
+            # 세션에 저장
             st.session_state.user_data = user_data
             
-            # 분석 요청
-            start_time = time.time()
+            # 종합분석 실행
+            st.session_state.quick_analysis = "detailed"
+            st.session_state.ai_consultation_auto_submit = True
             
-            with st.spinner("종합 분석을 수행하고 있습니다..."):
-                response = call_api("/comprehensive-analysis", {"user_data": user_data})
+            # 분석 질문 생성
+            analysis_query = f"""
+            종합적인 재무 분석을 해주세요.
             
-            elapsed_time = time.time() - start_time
+            기본 정보:
+            - 나이: {age}세
+            - 연소득: {income:,}원
+            - 연지출: {expenses:,}원
+            - 현재 저축액: {savings:,}원
+            - 위험 성향: {risk_tolerance}
             
-            if response and "analysis" in response:
-                st.success(f"✅ 분석 완료! (소요시간: {elapsed_time:.2f}초)")
+            다음 영역을 종합적으로 분석해주세요:
+            1. 예산 관리 및 재무 건강도
+            2. 투자 포트폴리오 구성
+            3. 세금 절약 전략
+            4. 은퇴 준비 계획
+            5. 위험 관리 방안
+            """
+            
+            st.session_state.user_query = analysis_query
+            
+            # 종합분석 바로 실행
+            st.success("✅ 종합분석을 시작합니다...")
+            
+            # 로딩 상태 시작
+            st.session_state.is_loading = True
+            
+            # 프로그레스 바와 로딩 메시지 표시
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            # 단계별 진행 상황 표시
+            steps = [
+                "🔄 종합분석 시작...",
+                "🔄 재무 건강도 분석 중...",
+                "🔄 투자 포트폴리오 구성 중...",
+                "🔄 세금 절약 전략 분석 중...",
+                "🔄 은퇴 준비 계획 수립 중...",
+                "✅ 완료!"
+            ]
+            
+            # 첫 번째 단계 표시
+            progress_bar.progress(0.1)
+            status_text.text(steps[0])
+            
+            # API 호출 (실제 처리)
+            response = call_api("/query", {"query": analysis_query, "user_data": user_data})
+            
+            # API 호출 완료 후 나머지 단계 표시
+            if response:
+                progress_bar.progress(0.3)
+                status_text.text(steps[1])
+                time.sleep(0.2)
                 
-                # 분석 결과 표시
-                analysis = response["analysis"]
+                progress_bar.progress(0.5)
+                status_text.text(steps[2])
+                time.sleep(0.2)
                 
-                # 분석 유형에 따른 표시
-                analysis_type = st.session_state.get('quick_analysis', 'detailed')
+                progress_bar.progress(0.7)
+                status_text.text(steps[3])
+                time.sleep(0.2)
                 
-                if analysis_type == "summary":
-                    # 요약 분석 표시
-                    st.subheader("📋 분석 요약")
-                    
-                    # 핵심 지표
-                    col1, col2, col3, col4 = st.columns(4)
-                    with col1:
-                        st.metric("연소득", f"₩{income:,.0f}")
-                    with col2:
-                        st.metric("연지출", f"₩{expenses:,.0f}")
-                    with col3:
-                        net_income = income - expenses
-                        st.metric("순소득", f"₩{net_income:,.0f}")
-                    with col4:
-                        savings_rate = (net_income / income) * 100 if income > 0 else 0
-                        st.metric("저축률", f"{savings_rate:.1f}%")
-                    
-                    # 핵심 권장사항만 표시
-                    if "recommendations" in analysis:
-                        st.subheader("💡 핵심 권장사항")
-                        recommendations = analysis["recommendations"]
-                        if isinstance(recommendations, str):
-                            # 문자열인 경우 줄바꿈으로 분리
-                            rec_list = [rec.strip() for rec in recommendations.split('\n') if rec.strip()]
-                        else:
-                            rec_list = recommendations[:3]  # 상위 3개만
-                        
-                        for i, rec in enumerate(rec_list, 1):
-                            st.write(f"**{i}.** {rec}")
-                    
-                    # 상세 분석 보기 버튼
-                    if st.button("📊 상세 분석 보기"):
-                        st.session_state.show_detailed = True
-                        st.rerun()
+                progress_bar.progress(0.9)
+                status_text.text(steps[4])
+                time.sleep(0.2)
                 
-                else:
-                    # 상세 분석 표시 (기본)
-                    st.subheader("📊 상세 분석 결과")
-                    
-                    # 예산 분석
-                    if "budget_analysis" in analysis:
-                        with st.expander("💰 예산 분석", expanded=True):
-                            budget_text = analysis["budget_analysis"]
-                            if budget_text:
-                                # 줄바꿈 처리
-                                budget_text = budget_text.replace("\\n", "\n").replace("\n", "<br>")
-                                st.markdown(f"<p>{budget_text}</p>", unsafe_allow_html=True)
-                    
-                    # 투자 분석
-                    if "investment_analysis" in analysis:
-                        with st.expander("📈 투자 분석", expanded=True):
-                            investment_text = analysis["investment_analysis"]
-                            if investment_text:
-                                investment_text = investment_text.replace("\\n", "\n").replace("\n", "<br>")
-                                st.markdown(f"<p>{investment_text}</p>", unsafe_allow_html=True)
-                    
-                    # 세금 분석
-                    if "tax_analysis" in analysis:
-                        with st.expander("🧾 세금 분석", expanded=True):
-                            tax_text = analysis["tax_analysis"]
-                            if tax_text:
-                                tax_text = tax_text.replace("\\n", "\n").replace("\n", "<br>")
-                                st.markdown(f"<p>{tax_text}</p>", unsafe_allow_html=True)
-                    
-                    # 은퇴 분석
-                    if "retirement_analysis" in analysis:
-                        with st.expander("🎯 은퇴 계획 분석", expanded=True):
-                            retirement_text = analysis["retirement_analysis"]
-                            if retirement_text:
-                                retirement_text = retirement_text.replace("\\n", "\n").replace("\n", "<br>")
-                                st.markdown(f"<p>{retirement_text}</p>", unsafe_allow_html=True)
-                    
-                    # 종합 권장사항
-                    if "recommendations" in analysis:
-                        st.subheader("💡 종합 권장사항")
-                        recommendations_text = analysis["recommendations"]
-                        if recommendations_text:
-                            recommendations_text = recommendations_text.replace("\\n", "\n").replace("\n", "<br>")
-                            st.markdown(f"<p>{recommendations_text}</p>", unsafe_allow_html=True)
-                    
-                    # 요약 보기 버튼
-                    if st.button("📋 요약 보기"):
-                        st.session_state.show_summary = True
-                        st.rerun()
-                
-                # 분석 완료 메시지
-                st.success("✅ 종합 분석이 완료되었습니다!")
-                
+                progress_bar.progress(1.0)
+                status_text.text(steps[5])
             else:
-                st.error("❌ 분석을 수행할 수 없습니다. API 서버를 확인해주세요.")
+                # API 호출 실패 시
+                progress_bar.progress(1.0)
+                status_text.text("❌ 분석 실패")
+            
+            # 로딩 상태 종료
+            st.session_state.is_loading = False
+            
+            if response and "answer" in response:
+                # 답변 내용 추출
+                answer_text = response["answer"]
+                
+                # 문자열이 아닌 경우 문자열로 변환
+                if not isinstance(answer_text, str):
+                    answer_text = str(answer_text)
+                
+                # 딕셔너리 형태의 문자열인 경우 실제 내용만 추출
+                if answer_text.startswith("{'answer': '") or answer_text.startswith('{"answer": "'):
+                    try:
+                        import json
+                        import ast
+                        try:
+                            parsed = ast.literal_eval(answer_text)
+                            if isinstance(parsed, dict) and "answer" in parsed:
+                                answer_text = parsed["answer"]
+                        except:
+                            try:
+                                parsed = json.loads(answer_text)
+                                if isinstance(parsed, dict) and "answer" in parsed:
+                                    answer_text = parsed["answer"]
+                            except:
+                                pass
+                    except:
+                        pass
+                
+                # 결과 표시
+                st.success("✅ 종합분석이 완료되었습니다!")
+                st.subheader("📊 종합 재무 분석 결과")
+                st.markdown(answer_text)
+                
+                # 채팅 히스토리에 추가
+                st.session_state.chat_history.append({
+                    "user": analysis_query,
+                    "ai": answer_text,
+                    "timestamp": datetime.now().strftime("%H:%M"),
+                    "type": "comprehensive_analysis"
+                })
+            else:
+                st.error("❌ 종합분석에 실패했습니다.")
+                if response and "detail" in response:
+                    st.error(f"오류 상세: {response['detail']}")
 
 def main():
     """메인 함수"""
@@ -848,8 +1126,11 @@ python -m streamlit run main.py --server.port 8501
     
     st.success("✅ API 서버에 연결되었습니다!")
     
-    # 탭 생성 (핵심 기능만)
-    tab_names = ["💬 AI 상담", "📊 종합 분석"]
+    # 실시간 시장 대시보드 표시
+    create_market_dashboard()
+    
+    # 탭 생성 (개선된 기능)
+    tab_names = ["💬 AI 상담", "📊 종합 분석", "📈 포트폴리오 시뮬레이션", "🎯 투자 분석"]
     tabs = st.tabs(tab_names)
     
     # AI 상담 탭
@@ -859,6 +1140,14 @@ python -m streamlit run main.py --server.port 8501
     # 종합 분석 탭
     with tabs[1]:
         render_comprehensive_analysis_tab()
+    
+    # 포트폴리오 시뮬레이션 탭
+    with tabs[2]:
+        render_portfolio_simulation_tab()
+    
+    # 투자 분석 탭
+    with tabs[3]:
+        render_investment_analysis_tab()
 
 if __name__ == "__main__":
     main()

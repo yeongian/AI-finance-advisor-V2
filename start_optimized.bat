@@ -30,7 +30,7 @@ if %errorlevel% equ 0 (
         taskkill /f /pid %%a >nul 2>&1
     )
     echo OK Existing API server stopped.
-    timeout /t 2 /nobreak >nul
+    timeout /t 1 /nobreak >nul
 )
 
 echo Checking port 8501 (Streamlit UI)...
@@ -41,7 +41,7 @@ if %errorlevel% equ 0 (
         taskkill /f /pid %%a >nul 2>&1
     )
     echo OK Existing Streamlit server stopped.
-    timeout /t 2 /nobreak >nul
+    timeout /t 1 /nobreak >nul
 )
 
 echo.
@@ -49,16 +49,16 @@ echo [3/4] Starting Optimized Server...
 echo Starting API server with optimized settings...
 echo.
 
-REM Start API server with optimized settings
-start /b python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload --log-level warning --timeout-keep-alive 60 --workers 2
+REM Start API server with optimized settings (빠른 시작)
+start /b python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload --log-level error --timeout-keep-alive 30 --workers 1 --limit-concurrency 100
 
 echo API server started with optimized settings.
-echo Waiting 5 seconds for API server to initialize...
-timeout /t 5 /nobreak >nul
+echo Waiting 3 seconds for API server to initialize...
+timeout /t 3 /nobreak >nul
 
 echo Starting Streamlit UI with optimized settings...
 echo.
-python -m streamlit run main.py --server.port 8501 --server.address 0.0.0.0 --server.maxUploadSize 200 --server.enableCORS false
+python -m streamlit run main.py --server.port 8501 --server.address 0.0.0.0 --server.maxUploadSize 200 --server.enableCORS false --server.enableXsrfProtection false
 
 echo.
 echo ================================================

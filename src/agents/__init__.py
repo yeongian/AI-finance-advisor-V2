@@ -1,8 +1,8 @@
 """
-AI Agents 패키지
+Agents 모듈
+메인 Multi Agent 시스템만 사용 (중복 파일 제거)
 """
 
-from .base_agent import BaseAgent
-from .budget_agent import BudgetAgent
+from .multi_agent_system import MultiAgentSystem
 
-__all__ = ['BaseAgent', 'BudgetAgent']
+__all__ = ["MultiAgentSystem"]

@@ -227,30 +227,12 @@ class MarketAnalysisTool(BaseTool):
     def _run(self, analysis_request: str) -> str:
         """시장 분석 실행"""
         try:
-            data = json.loads(analysis_request)
-            symbols = data.get('symbols', ['^KS11', '^GSPC'])  # KOSPI, S&P 500
+            # 코스피/코스닥 제거 - 기본 분석만 제공배포포
             
-            market_data = {}
-            
-            for symbol in symbols:
-                try:
-                    stock_data = get_stock_data(symbol, period="1y")
-                    if not stock_data.empty:
-                        returns = calculate_returns(stock_data['Close'])
-                        market_data[symbol] = {
-                            "current_price": stock_data['Close'].iloc[-1],
-                            "total_return": returns["total_return"],
-                            "annualized_return": returns["annualized_return"],
-                            "volatility": stock_data['Close'].pct_change().std() * 100
-                        }
-                except Exception as e:
-                    logger.warning(f"데이터 가져오기 실패: {symbol}, {e}")
-            
-            # 시장 동향 분석
             analysis = {
-                "market_data": market_data,
-                "trend_analysis": self._analyze_trends(market_data),
-                "recommendations": self._generate_market_recommendations(market_data)
+                "market_data": {},
+                "trend_analysis": {"status": "기본 분석"},
+                "recommendations": ["시장 데이터 없이 기본 투자 원칙을 기반으로 분석합니다."]
             }
             
             return json.dumps(analysis, ensure_ascii=False, indent=2)
@@ -277,19 +259,10 @@ class MarketAnalysisTool(BaseTool):
         """시장 기반 추천사항"""
         recommendations = []
         
-        # KOSPI 분석
-        kospi_data = market_data.get('^KS11', {})
-        if kospi_data:
-            if kospi_data["total_return"] > 20:
-                recommendations.append("KOSPI가 강세입니다. 단, 과열 가능성을 고려하세요.")
-            elif kospi_data["total_return"] < -10:
-                recommendations.append("KOSPI가 약세입니다. 저평가 기회를 모니터링하세요.")
-        
-        # S&P 500 분석
-        sp500_data = market_data.get('^GSPC', {})
-        if sp500_data:
-            if sp500_data["total_return"] > 15:
-                recommendations.append("미국 시장이 강세입니다. 글로벌 분산 투자를 고려하세요.")
+        # 기본 투자 원칙 기반 추천
+        recommendations.append("분산 투자를 통한 위험 관리가 중요합니다.")
+        recommendations.append("장기 투자 관점에서 포트폴리오를 구성하세요.")
+        recommendations.append("정기적인 포트폴리오 리밸런싱을 고려하세요.")
         
         return recommendations
 
@@ -385,10 +358,8 @@ class InvestmentAgent(BaseAgent):
     def analyze_market(self, symbols: List[str] = None) -> Dict[str, Any]:
         """시장 분석 수행"""
         try:
-            if symbols is None:
-                symbols = ['^KS11', '^GSPC']  # KOSPI, S&P 500
-            
-            market_result = self.tools[2]._run(json.dumps({"symbols": symbols}))
+            # 코스피/코스닥 제거 - 기본 분석만 제공
+            market_result = self.tools[2]._run(json.dumps({"symbols": []}))
             return json.loads(market_result)
             
         except Exception as e:

@@ -1,8 +1,7 @@
 """
-FastAPI 백엔드 API
-AI 재무관리 어드바이저의 REST API 서버
+API 모듈
+메인 FastAPI 앱만 사용 (중복 파일 제거)
 """
 
-from .main import app
-
-__all__ = ["app"]
+# 메인 API는 main.py에서 관리
+__all__ = []

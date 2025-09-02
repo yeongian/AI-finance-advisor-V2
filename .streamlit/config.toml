@@ -26,8 +26,6 @@ toolbarMode = "minimal"
 [runner]
 # 러너 최적화
 magicEnabled = false
-installTracer = false
-fixMatplotlib = true
 
 [logger]
 # 로깅 최적화

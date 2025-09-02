@@ -49,6 +49,8 @@ echo - 시각화 패키지들 설치 중...
 python -m pip install plotly matplotlib
 echo - 벡터 데이터베이스 패키지들 설치 중...
 python -m pip install sentence-transformers faiss-cpu chromadb
+echo - 텍스트 처리 패키지들 설치 중...
+python -m pip install textblob
 echo - 환경 설정 패키지들 설치 중...
 python -m pip install python-dotenv pydantic-settings
 
@@ -148,6 +150,16 @@ if %errorlevel% equ 0 (
     echo ✅ pandas 이미 설치되어 있습니다.
 ) else (
     echo ❌ pandas 설치 안됨
+)
+
+echo - textblob 확인 중...
+python -c "import textblob; print('✅ textblob 설치됨')" 2>nul
+if %errorlevel% equ 0 (
+    echo ✅ textblob 이미 설치되어 있습니다.
+) else (
+    echo ❌ textblob 설치 안됨. 설치 중...
+    pip install textblob
+    echo ✅ textblob 설치 완료
 )
 
 echo.

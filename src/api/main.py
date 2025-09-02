@@ -18,9 +18,10 @@ import uvicorn
 from ..core.config import settings
 from ..rag.knowledge_base import KnowledgeBase
 from ..agents.multi_agent_system import MultiAgentSystem
-from .enhanced_endpoints import router as enhanced_router
-from .advanced_tool_endpoints import router as advanced_tool_router
-from .langgraph_endpoints import router as langgraph_router
+from ..core.financial_data import financial_data
+from ..core.portfolio_simulator import portfolio_simulator
+from ..core.advanced_ai import advanced_ai
+# 중복된 라우터 import 제거 - 메인 API만 사용
 
 # 로깅 설정 (UTF-8 인코딩으로 설정)
 import sys
@@ -29,7 +30,7 @@ import os
 # 로그 디렉토리 생성
 os.makedirs('logs', exist_ok=True)
 
-# 콘솔 출력용 핸들러 (이모지 제거)
+# 콘솔 출력용 핸들러 (이모지 제거 및 인코딩 처리)
 class ConsoleHandler(logging.StreamHandler):
     def emit(self, record):
         try:
@@ -45,12 +46,20 @@ class ConsoleHandler(logging.StreamHandler):
             msg = msg.replace('🔍', '[CHECK]').replace('📝', '[SAMPLE]').replace('💭', '[QUESTION]')
             msg = msg.replace('🗑️', '[CLEAR]').replace('🤖', '[AI]').replace('📚', '[KB]')
             
-            stream = self.stream
-            stream.write(msg + self.terminator)
-            self.flush()
+            # UTF-8 인코딩으로 안전하게 출력
+            try:
+                stream = self.stream
+                stream.write(msg + self.terminator)
+                self.flush()
+            except UnicodeEncodeError:
+                # 인코딩 오류 시 ASCII로 변환
+                safe_msg = msg.encode('ascii', errors='ignore').decode('ascii')
+                stream.write(safe_msg + self.terminator)
+                self.flush()
         except Exception:
             self.handleError(record)
 
+# 로깅 설정
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -79,6 +88,14 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
+# favicon.ico 404 에러 해결
+from fastapi.responses import Response
+
+@app.get("/favicon.ico")
+async def favicon():
+    """favicon.ico 요청 처리"""
+    return Response(status_code=204)  # No Content 응답
+
 # CORS 설정
 app.add_middleware(
     CORSMiddleware,
@@ -88,10 +105,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 향상된 기능 라우터 추가 (지연 로딩)
-# app.include_router(enhanced_router)
-# app.include_router(advanced_tool_router)
-# app.include_router(langgraph_router)
+# 중복된 라우터 제거 - 메인 API만 사용
 
 # 전역 변수
 knowledge_base = None
@@ -173,7 +187,7 @@ async def get_knowledge_base():
     
     # 초기화 중인 경우 대기
     if is_initializing:
-        logger.info("📚 지식베이스 초기화 중... 대기")
+        logger.info("[KB] 지식베이스 초기화 중... 대기")
         while is_initializing:
             await asyncio.sleep(0.1)
         return knowledge_base
@@ -182,7 +196,7 @@ async def get_knowledge_base():
     is_initializing = True
     try:
         from ..rag.knowledge_base import KnowledgeBase
-        logger.info("📚 지식베이스 지연 로딩 시작...")
+        logger.info("[KB] 지식베이스 지연 로딩 시작...")
         knowledge_base = KnowledgeBase()
         success = knowledge_base.initialize()
         if not success:
@@ -190,7 +204,7 @@ async def get_knowledge_base():
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="지식베이스 초기화 실패"
             )
-        logger.info("📚 지식베이스 지연 로딩 완료")
+        logger.info("[KB] 지식베이스 지연 로딩 완료")
     except ImportError as e:
         is_initializing = False
         logger.error(f"지식베이스 모듈 임포트 실패: {e}")
@@ -216,7 +230,7 @@ async def get_multi_agent_system():
     if multi_agent_system is None:
         try:
             from ..agents.multi_agent_system import MultiAgentSystem
-            logger.info("🤖 멀티 에이전트 시스템 지연 로딩 시작...")
+            logger.info("[AI] 멀티 에이전트 시스템 지연 로딩 시작...")
             multi_agent_system = MultiAgentSystem()
             kb = await get_knowledge_base()
             success = multi_agent_system.initialize(kb)
@@ -489,6 +503,171 @@ async def search_knowledge_base(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"검색 중 오류가 발생했습니다: {str(e)}"
+        )
+
+# ================================================
+# 새로운 고급 기능 API 엔드포인트
+# ================================================
+
+@app.get("/financial-data/stock/{symbol}")
+async def get_stock_data(symbol: str):
+    """주식 데이터 조회 (비활성화)"""
+    # 코스피/코스닥 제거로 인한 비활성화
+    return {
+        "symbol": symbol,
+        "status": "disabled",
+        "message": "주식 데이터 조회 기능이 비활성화되었습니다."
+    }
+
+@app.get("/financial-data/exchange-rate")
+async def get_exchange_rate(from_currency: str = "USD", to_currency: str = "KRW"):
+    """환율 정보 조회"""
+    try:
+        data = await financial_data.get_exchange_rate(from_currency, to_currency)
+        if data:
+            return data
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"환율 데이터를 찾을 수 없습니다: {from_currency}/{to_currency}"
+            )
+    except Exception as e:
+        logger.error(f"환율 데이터 조회 실패: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"환율 데이터 조회 중 오류가 발생했습니다: {str(e)}"
+        )
+
+@app.get("/financial-data/economic-indicators")
+async def get_economic_indicators():
+    """경제 지표 조회"""
+    try:
+        data = await financial_data.get_economic_indicators()
+        if data:
+            return data
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="경제 지표 데이터를 찾을 수 없습니다."
+            )
+    except Exception as e:
+        logger.error(f"경제 지표 조회 실패: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"경제 지표 조회 중 오류가 발생했습니다: {str(e)}"
+        )
+
+@app.post("/portfolio/simulate")
+async def simulate_portfolio(request: Dict[str, Any]):
+    """포트폴리오 시뮬레이션"""
+    try:
+        symbols = request.get("symbols", [])
+        weights = request.get("weights", [])
+        start_date = request.get("start_date", "2023-01-01")
+        end_date = request.get("end_date")
+        initial_investment = request.get("initial_investment", 10000000)
+        
+        if len(symbols) != len(weights):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="심볼과 가중치의 개수가 일치하지 않습니다."
+            )
+        
+        result = portfolio_simulator.simulate_portfolio(
+            symbols, weights, start_date, end_date, initial_investment
+        )
+        
+        if "error" in result:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result["error"]
+            )
+        
+        return result
+    except Exception as e:
+        logger.error(f"포트폴리오 시뮬레이션 실패: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"포트폴리오 시뮬레이션 중 오류가 발생했습니다: {str(e)}"
+        )
+
+@app.post("/portfolio/efficient-frontier")
+async def create_efficient_frontier(request: Dict[str, Any]):
+    """효율적 프론티어 생성"""
+    try:
+        symbols = request.get("symbols", [])
+        start_date = request.get("start_date", "2023-01-01")
+        end_date = request.get("end_date")
+        num_portfolios = request.get("num_portfolios", 1000)
+        
+        result = portfolio_simulator.create_efficient_frontier(
+            symbols, start_date, end_date, num_portfolios
+        )
+        
+        if "error" in result:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result["error"]
+            )
+        
+        return result
+    except Exception as e:
+        logger.error(f"효율적 프론티어 생성 실패: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"효율적 프론티어 생성 중 오류가 발생했습니다: {str(e)}"
+        )
+
+@app.post("/ai/sentiment-analysis")
+async def analyze_sentiment(request: Dict[str, Any]):
+    """시장 감정 분석"""
+    try:
+        text_data = request.get("text_data", [])
+        
+        if not text_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="분석할 텍스트 데이터가 필요합니다."
+            )
+        
+        result = advanced_ai.analyze_market_sentiment(text_data)
+        
+        if "error" in result:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result["error"]
+            )
+        
+        return result
+    except Exception as e:
+        logger.error(f"감정 분석 실패: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"감정 분석 중 오류가 발생했습니다: {str(e)}"
+        )
+
+@app.get("/ai/market-prediction/{symbol}")
+async def predict_market_trend(
+    symbol: str,
+    days: int = 30,
+    confidence_level: float = 0.8
+):
+    """시장 트렌드 예측"""
+    try:
+        result = advanced_ai.predict_market_trend(symbol, days, confidence_level)
+        
+        if "error" in result:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=result["error"]
+            )
+        
+        return result
+    except Exception as e:
+        logger.error(f"시장 예측 실패: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"시장 예측 중 오류가 발생했습니다: {str(e)}"
         )
 
 # 예외 처리
