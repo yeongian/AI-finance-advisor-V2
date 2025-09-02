@@ -14,8 +14,16 @@ import sys
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-import plotly.graph_objects as go
-import plotly.express as px
+
+# plotly import를 안전하게 처리
+try:
+    import plotly.graph_objects as go
+    import plotly.express as px
+    PLOTLY_AVAILABLE = True
+except ImportError:
+    PLOTLY_AVAILABLE = False
+    st.warning("⚠️ plotly가 설치되지 않았습니다. 차트 기능이 제한됩니다.")
+
 import pandas as pd
 import numpy as np
 
@@ -135,6 +143,10 @@ def create_market_dashboard():
 
 def create_portfolio_chart(portfolio_data):
     """포트폴리오 차트 생성"""
+    if not PLOTLY_AVAILABLE:
+        st.warning("plotly가 설치되지 않아 차트를 표시할 수 없습니다.")
+        return None
+        
     if not portfolio_data or "error" in portfolio_data:
         return None
     
@@ -171,6 +183,10 @@ def create_portfolio_chart(portfolio_data):
 
 def create_expense_pie_chart(expenses_data):
     """지출 파이 차트 생성"""
+    if not PLOTLY_AVAILABLE:
+        st.warning("plotly가 설치되지 않아 차트를 표시할 수 없습니다.")
+        return None
+        
     if not expenses_data:
         return None
     
@@ -225,7 +241,7 @@ if 'show_question_input' not in st.session_state:
 
 def render_ai_consultation_tab():
     """AI 상담 탭"""
-    st.header("💬 AI 상담")
+    st.header("💬 AI 상담")ㅅㅅ
     
     # 샘플 질문 버튼들
     st.subheader("📝 샘플 질문")
@@ -728,24 +744,31 @@ def render_portfolio_simulation_tab():
                 if "portfolios" in response:
                     portfolios = response["portfolios"]
                     
-                    # 산점도 차트 생성
-                    returns = [p["return"] for p in portfolios]
-                    volatilities = [p["volatility"] for p in portfolios]
-                    
-                    fig = px.scatter(
-                            x=volatilities,
-                            y=returns,
-                            title="효율적 프론티어",
-                            labels={"x": "변동성 (리스크)", "y": "기대 수익률"},
-                            color_discrete_sequence=['blue']
-                        )
-                        
-                    fig.update_layout(
-                        height=500,
-                        showlegend=False
-                    )
-                    
-                    st.plotly_chart(fig, use_container_width=True)
+                                            # 산점도 차트 생성
+                        if PLOTLY_AVAILABLE:
+                            returns = [p["return"] for p in portfolios]
+                            volatilities = [p["volatility"] for p in portfolios]
+                            
+                            fig = px.scatter(
+                                x=volatilities,
+                                y=returns,
+                                title="효율적 프론티어",
+                                labels={"x": "변동성 (리스크)", "y": "기대 수익률"},
+                                color_discrete_sequence=['blue']
+                            )
+                            
+                            fig.update_layout(
+                                height=500,
+                                showlegend=False
+                            )
+                            
+                            st.plotly_chart(fig, use_container_width=True)
+                        else:
+                            st.warning("plotly가 설치되지 않아 차트를 표시할 수 없습니다.")
+                            # 대신 데이터 테이블로 표시
+                            st.write("**포트폴리오 데이터:**")
+                            portfolio_df = pd.DataFrame(portfolios)
+                            st.dataframe(portfolio_df[["return", "volatility"]].head(10))
                     
                     # 최적 포트폴리오 정보
                     if "optimal_portfolio" in response:
@@ -855,30 +878,41 @@ def render_investment_analysis_tab():
                             st.metric("감정 레이블", sentiment_label)
                         
                         # 감정 점수 시각화
-                        fig = go.Figure(go.Indicator(
-                            mode="gauge+number+delta",
-                            value=sentiment_score,
-                            domain={'x': [0, 1], 'y': [0, 1]},
-                            title={'text': "시장 감정 지수"},
-                            delta={'reference': 0},
-                            gauge={
-                                'axis': {'range': [-1, 1]},
-                                'bar': {'color': "darkblue"},
-                                'steps': [
-                                    {'range': [-1, -0.3], 'color': "lightgray"},
-                                    {'range': [-0.3, 0.3], 'color': "yellow"},
-                                    {'range': [0.3, 1], 'color': "lightgreen"}
-                                ],
-                                'threshold': {
-                                    'line': {'color': "red", 'width': 4},
-                                    'thickness': 0.75,
-                                    'value': 0.8
+                        if PLOTLY_AVAILABLE:
+                            fig = go.Figure(go.Indicator(
+                                mode="gauge+number+delta",
+                                value=sentiment_score,
+                                domain={'x': [0, 1], 'y': [0, 1]},
+                                title={'text': "시장 감정 지수"},
+                                delta={'reference': 0},
+                                gauge={
+                                    'axis': {'range': [-1, 1]},
+                                    'bar': {'color': "darkblue"},
+                                    'steps': [
+                                        {'range': [-1, -0.3], 'color': "lightgray"},
+                                        {'range': [-0.3, 0.3], 'color': "yellow"},
+                                        {'range': [0.3, 1], 'color': "lightgreen"}
+                                    ],
+                                    'threshold': {
+                                        'line': {'color': "red", 'width': 4},
+                                        'thickness': 0.75,
+                                        'value': 0.8
+                                    }
                                 }
-                            }
-                        ))
-                        
-                        fig.update_layout(height=400)
-                        st.plotly_chart(fig, use_container_width=True)
+                            ))
+                            
+                            fig.update_layout(height=400)
+                            st.plotly_chart(fig, use_container_width=True)
+                        else:
+                            st.warning("plotly가 설치되지 않아 게이지 차트를 표시할 수 없습니다.")
+                            # 대신 간단한 텍스트로 표시
+                            st.write(f"**감정 점수:** {sentiment_score:.2f}")
+                            if sentiment_score > 0.3:
+                                st.success("긍정적")
+                            elif sentiment_score < -0.3:
+                                st.error("부정적")
+                            else:
+                                st.info("중립적")
                         
             else:
                 # 시장 예측
