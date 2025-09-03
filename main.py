@@ -15,6 +15,15 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
+# 페이지 설정 - 극한 성능 최적화 (반드시 다른 st 명령어보다 먼저 실행)
+st.set_page_config(
+    page_title="AI 재무관리 어드바이저",
+    page_icon="💰",
+    layout="wide",
+    initial_sidebar_state="collapsed",  # 사이드바 접기로 초기 로딩 속도 향상
+    menu_items=None  # 메뉴 비활성화로 로딩 속도 향상
+)
+
 # plotly import를 안전하게 처리
 try:
     import plotly.graph_objects as go
@@ -41,15 +50,6 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
-
-# 페이지 설정 - 극한 성능 최적화
-st.set_page_config(
-    page_title="AI 재무관리 어드바이저",
-    page_icon="💰",
-    layout="wide",
-    initial_sidebar_state="collapsed",  # 사이드바 접기로 초기 로딩 속도 향상
-    menu_items=None  # 메뉴 비활성화로 로딩 속도 향상
-)
 
 # API 설정
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
@@ -241,7 +241,7 @@ if 'show_question_input' not in st.session_state:
 
 def render_ai_consultation_tab():
     """AI 상담 탭"""
-    st.header("💬 AI 상담")ㅅㅅ
+    st.header("💬 AI 상담")
     
     # 샘플 질문 버튼들
     st.subheader("📝 샘플 질문")
@@ -630,49 +630,50 @@ def render_portfolio_simulation_tab():
     # 포트폴리오 설정
     st.subheader("🎯 포트폴리오 설정")
     
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # 종목 선택
-        st.write("**📊 종목 선택**")
-        symbols_input = st.text_area(
-            "종목 코드 (한 줄에 하나씩)",
-            value="005930.KS\n000660.KS\n035420.KS\n051910.KS\n006400.KS",
-            height=100,
-            help="야후 파이낸스 종목 코드를 입력하세요. 예: 005930.KS (삼성전자)"
-        )
+    with st.form("portfolio_simulation"):
+        col1, col2 = st.columns(2)
         
-        # 투자 기간
-        st.write("**📅 투자 기간**")
-        start_date = st.date_input("시작일", value=datetime(2023, 1, 1))
-        end_date = st.date_input("종료일", value=datetime.now())
+        with col1:
+            # 종목 선택
+            st.write("**📊 종목 선택**")
+            symbols_input = st.text_area(
+                "종목 코드 (한 줄에 하나씩)",
+                value="005930.KS\n000660.KS\n035420.KS\n051910.KS\n006400.KS",
+                height=100,
+                help="야후 파이낸스 종목 코드를 입력하세요. 예: 005930.KS (삼성전자)"
+            )
+            
+            # 투자 기간
+            st.write("**📅 투자 기간**")
+            start_date = st.date_input("시작일", value=datetime(2023, 1, 1))
+            end_date = st.date_input("종료일", value=datetime.now())
+            
+        with col2:
+            # 투자 금액
+            st.write("**💰 투자 금액**")
+            initial_investment = st.number_input(
+                "초기 투자 금액 (원)",
+                min_value=1000000,
+                value=10000000,
+                step=1000000,
+                format="%d"
+            )
+            
+            # 포트폴리오 수
+            st.write("**📊 시뮬레이션 설정**")
+            num_portfolios = st.slider("포트폴리오 수", min_value=100, max_value=1000, value=500, step=100)
+            
+            # 위험 성향
+            risk_tolerance = st.selectbox(
+                "위험 성향",
+                ["conservative", "moderate", "aggressive"],
+                format_func=lambda x: {"conservative": "보수적", "moderate": "중립적", "aggressive": "공격적"}[x]
+            )
         
-    with col2:
-        # 투자 금액
-        st.write("**💰 투자 금액**")
-        initial_investment = st.number_input(
-            "초기 투자 금액 (원)",
-            min_value=1000000,
-            value=10000000,
-            step=1000000,
-            format="%d"
-        )
-        
-        # 포트폴리오 수
-        st.write("**📊 시뮬레이션 설정**")
-        num_portfolios = st.slider("포트폴리오 수", min_value=100, max_value=1000, value=500, step=100)
-        
-        # 위험 성향
-        risk_tolerance = st.selectbox(
-            "위험 성향",
-            ["conservative", "moderate", "aggressive"],
-            format_func=lambda x: {"conservative": "보수적", "moderate": "중립적", "aggressive": "공격적"}[x]
-        )
-    
-    # 시뮬레이션 실행
-    if st.button("🚀 포트폴리오 시뮬레이션 실행", type="primary"):
-        if symbols_input.strip():
-            symbols = [s.strip() for s in symbols_input.split('\n') if s.strip()]
+        # 시뮬레이션 실행
+        if st.form_submit_button("🚀 포트폴리오 시뮬레이션 실행", type="primary", use_container_width=True):
+            if symbols_input.strip():
+                symbols = [s.strip() for s in symbols_input.split('\n') if s.strip()]
             
             # 로딩 상태 시작
             st.session_state.is_loading = True
@@ -744,31 +745,31 @@ def render_portfolio_simulation_tab():
                 if "portfolios" in response:
                     portfolios = response["portfolios"]
                     
-                                            # 산점도 차트 생성
-                        if PLOTLY_AVAILABLE:
-                            returns = [p["return"] for p in portfolios]
-                            volatilities = [p["volatility"] for p in portfolios]
-                            
-                            fig = px.scatter(
-                                x=volatilities,
-                                y=returns,
-                                title="효율적 프론티어",
-                                labels={"x": "변동성 (리스크)", "y": "기대 수익률"},
-                                color_discrete_sequence=['blue']
-                            )
-                            
-                            fig.update_layout(
-                                height=500,
-                                showlegend=False
-                            )
-                            
-                            st.plotly_chart(fig, use_container_width=True)
-                        else:
-                            st.warning("plotly가 설치되지 않아 차트를 표시할 수 없습니다.")
-                            # 대신 데이터 테이블로 표시
-                            st.write("**포트폴리오 데이터:**")
-                            portfolio_df = pd.DataFrame(portfolios)
-                            st.dataframe(portfolio_df[["return", "volatility"]].head(10))
+                    # 산점도 차트 생성
+                    if PLOTLY_AVAILABLE:
+                        returns = [p["return"] for p in portfolios]
+                        volatilities = [p["volatility"] for p in portfolios]
+                        
+                        fig = px.scatter(
+                            x=volatilities,
+                            y=returns,
+                            title="효율적 프론티어",
+                            labels={"x": "변동성 (리스크)", "y": "기대 수익률"},
+                            color_discrete_sequence=['blue']
+                        )
+                        
+                        fig.update_layout(
+                            height=500,
+                            showlegend=False
+                        )
+                        
+                        st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.warning("plotly가 설치되지 않아 차트를 표시할 수 없습니다.")
+                        # 대신 데이터 테이블로 표시
+                        st.write("**포트폴리오 데이터:**")
+                        portfolio_df = pd.DataFrame(portfolios)
+                        st.dataframe(portfolio_df[["return", "volatility"]].head(10))
                     
                     # 최적 포트폴리오 정보
                     if "optimal_portfolio" in response:
@@ -800,6 +801,9 @@ def render_portfolio_simulation_tab():
                         st.error(f"오류 상세: {response['detail']}")
                     else:
                         st.error("API 서버에서 응답을 받지 못했습니다.")
+                    
+                    # 현재 탭에 결과 표시 (AI 상담 탭으로 이동하지 않음)
+                    st.info("💡 시뮬레이션 결과는 현재 탭에서 확인할 수 있습니다.")
         else:
             st.warning("⚠️ 종목 코드를 입력해주세요.")
 
@@ -812,50 +816,51 @@ def render_investment_analysis_tab():
     # 종목 분석
     st.subheader("📊 종목 분석")
     
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        symbol = st.text_input(
-            "종목 코드",
-            value="005930.KS",
-            help="야후 파이낸스 종목 코드를 입력하세요. 예: 005930.KS (삼성전자)"
-        )
+    with st.form("investment_analysis"):
+        col1, col2 = st.columns(2)
         
-        analysis_type = st.selectbox(
-            "분석 유형",
-            ["sentiment", "prediction"],
-            format_func=lambda x: {"sentiment": "감정 분석", "prediction": "시장 예측"}[x]
-        )
-    
-    with col2:
-        if analysis_type == "prediction":
-            days = st.slider("예측 기간 (일)", min_value=7, max_value=90, value=30)
-            confidence_level = st.slider("신뢰도", min_value=0.5, max_value=0.95, value=0.8, step=0.05)
-    
-    # 분석 실행
-    if st.button("🔍 투자 분석 실행", type="primary"):
-        if symbol.strip():
-            # 로딩 상태 시작
-            st.session_state.is_loading = True
+        with col1:
+            symbol = st.text_input(
+                "종목 코드",
+                value="005930.KS",
+                help="야후 파이낸스 종목 코드를 입력하세요. 예: 005930.KS (삼성전자)"
+            )
             
-            # 프로그레스 바와 로딩 메시지 표시
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-            
-            # 단계별 진행 상황 표시
-            steps = [
-                "🔄 투자 분석 시작...",
-                "🔄 데이터 수집 중...",
-                "🔄 분석 처리 중...",
-                "🔄 결과 생성 중...",
-                "✅ 완료!"
-            ]
-            
-            # 첫 번째 단계 표시
-            progress_bar.progress(0.2)
-            status_text.text(steps[0])
-            
-            if analysis_type == "sentiment":
+            analysis_type = st.selectbox(
+                "분석 유형",
+                ["sentiment", "prediction"],
+                format_func=lambda x: {"sentiment": "감정 분석", "prediction": "시장 예측"}[x]
+            )
+        
+        with col2:
+            if analysis_type == "prediction":
+                days = st.slider("예측 기간 (일)", min_value=7, max_value=90, value=30)
+                confidence_level = st.slider("신뢰도", min_value=0.5, max_value=0.95, value=0.8, step=0.05)
+        
+        # 분석 실행
+        if st.form_submit_button("🔍 투자 분석 실행", type="primary", use_container_width=True):
+            if symbol.strip():
+                # 로딩 상태 시작
+                st.session_state.is_loading = True
+                
+                # 프로그레스 바와 로딩 메시지 표시
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                # 단계별 진행 상황 표시
+                steps = [
+                    "🔄 투자 분석 시작...",
+                    "🔄 데이터 수집 중...",
+                    "🔄 분석 처리 중...",
+                    "🔄 결과 생성 중...",
+                    "✅ 완료!"
+                ]
+                
+                # 첫 번째 단계 표시
+                progress_bar.progress(0.2)
+                status_text.text(steps[0])
+                
+                if analysis_type == "sentiment":
                     # 감정 분석
                     sentiment_data = {
                         "text_data": [f"분석 대상: {symbol}"]
@@ -914,11 +919,14 @@ def render_investment_analysis_tab():
                             else:
                                 st.info("중립적")
                         
-            else:
-                # 시장 예측
-                response = call_api(f"/ai/market-prediction/{symbol}?days={days}&confidence_level={confidence_level}")
-                
-                if response and "error" not in response:
+                        # 현재 탭에 결과 표시 (다른 탭으로 이동하지 않음)
+                        st.info("💡 감정 분석 결과는 현재 탭에서 확인할 수 있습니다.")
+                        
+                else:
+                    # 시장 예측
+                    response = call_api(f"/ai/market-prediction/{symbol}?days={days}&confidence_level={confidence_level}")
+                    
+                    if response and "error" not in response:
                         st.success("✅ 시장 예측이 완료되었습니다!")
                         
                         # 결과 표시
@@ -940,10 +948,13 @@ def render_investment_analysis_tab():
                         if recommendation:
                             st.write("**💡 투자 권고사항**")
                             st.info(recommendation)
-                else:
-                    st.error("❌ 시장 예측에 실패했습니다.")
-        else:
-            st.warning("⚠️ 종목 코드를 입력해주세요.")
+                    else:
+                        st.error("❌ 시장 예측에 실패했습니다.")
+                        
+                        # 현재 탭에 결과 표시 (다른 탭으로 이동하지 않음)
+                        st.info("💡 분석 결과는 현재 탭에서 확인할 수 있습니다.")
+            else:
+                st.warning("⚠️ 종목 코드를 입력해주세요.")
 
 def render_comprehensive_analysis_tab():
     """종합 분석 탭"""
@@ -1100,6 +1111,10 @@ def render_comprehensive_analysis_tab():
                     "timestamp": datetime.now().strftime("%H:%M"),
                     "type": "comprehensive_analysis"
                 })
+                
+                # 현재 탭에 결과 표시 (AI 상담 탭으로 이동하지 않음)
+                st.success("✅ 종합분석이 완료되었습니다! 결과는 AI 상담 탭에서 확인할 수 있습니다.")
+                st.info("💡 AI 상담 탭으로 이동하여 대화 기록을 확인하세요.")
             else:
                 st.error("❌ 종합분석에 실패했습니다.")
                 if response and "detail" in response:

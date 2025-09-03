@@ -46,6 +46,26 @@ AI 재무관리 어드바이저는 개인의 재무 상황을 종합적으로 �
 
 ## 🚀 빠른 시작
 
+### 🔧 실행 모드 선택
+
+#### 1. 간단 버전 (권장)
+- **특징**: API 서버 없이 내장 로직으로 동작
+- **의존성**: 최소 (streamlit, pandas, numpy, plotly만 필요)
+- **사용법**: `start_simple.bat` 실행
+- **접속**: http://localhost:8502
+
+#### 2. 직접 실행 버전
+- **특징**: API 서버 없이 전체 기능 사용
+- **의존성**: 전체 (LangChain, Azure OpenAI 등)
+- **사용법**: `start_direct.bat` 실행
+- **접속**: http://localhost:8501
+
+#### 3. 기존 API 서버 방식
+- **특징**: FastAPI 서버와 Streamlit 클라이언트 분리
+- **의존성**: 전체 + 네트워크 연결 필요
+- **사용법**: `02_start_app.bat` 실행
+- **접속**: http://localhost:8501 (UI), http://localhost:8000 (API)
+
 ### 1. 환경 설정
 
 ```bash
@@ -66,7 +86,18 @@ pip install -r requirements.txt
 
 ### 3. 실행
 
-#### 방법 1: 배치 파일 사용 (Windows)
+#### 🚀 API 서버 없이 직접 실행 (권장)
+회사 개발환경에서 API 서버가 작동하지 않는 경우 사용하세요.
+
+```bash
+# 방법 1: 간단 버전 (최소 의존성)
+start_simple.bat
+
+# 방법 2: 직접 실행 버전 (전체 기능)
+start_direct.bat
+```
+
+#### 방법 3: 기존 API 서버 방식
 ```bash
 # 1. 초기 설정
 01_initial_setup.bat
@@ -78,7 +109,7 @@ pip install -r requirements.txt
 03_start_docker.bat
 ```
 
-#### 방법 2: 수동 실행
+#### 방법 4: 수동 실행
 ```bash
 # API 서버 실행
 python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
@@ -88,6 +119,12 @@ python -m streamlit run main.py --server.port 8501
 ```
 
 ### 4. 접속
+
+#### 직접 실행 모드
+- **간단 버전**: http://localhost:8502
+- **직접 실행 버전**: http://localhost:8501
+
+#### 기존 API 서버 모드
 - **웹 인터페이스**: http://localhost:8501
 - **API 문서**: http://localhost:8000/docs
 - **새로운 API 엔드포인트**:
@@ -240,6 +277,41 @@ LOG_LEVEL=INFO
 3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
 4. Push to the Branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
+
+## 🔧 문제 해결
+
+### API 서버 연결 오류
+회사 개발환경에서 API 서버가 작동하지 않는 경우:
+
+1. **간단 버전 사용**: `start_simple.bat` 실행
+   - API 서버 없이 내장 로직으로 동작
+   - 최소 의존성으로 빠른 실행
+
+2. **직접 실행 버전 사용**: `start_direct.bat` 실행
+   - API 서버 없이 전체 기능 사용
+   - LangChain과 Azure OpenAI 직접 사용
+
+3. **포트 충돌 해결**:
+   ```bash
+   # 다른 포트 사용
+   streamlit run main_simple.py --server.port 8503
+   ```
+
+### 의존성 설치 오류
+```bash
+# 최소 의존성만 설치
+pip install streamlit pandas numpy plotly python-dotenv
+
+# 전체 의존성 설치
+pip install -r requirements.txt
+```
+
+### 환경변수 설정
+`.env` 파일이 없는 경우:
+```bash
+# 기본 설정으로 실행 (간단 버전)
+start_simple.bat
+```
 
 ## 📝 라이선스
 
